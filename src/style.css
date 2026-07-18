@@ -289,6 +289,30 @@ body {
   opacity: 1;
 }
 
+#drunk-overlay.wired .chromatic {
+  box-shadow: inset 0 0 40px rgba(255, 240, 180, calc(0.15 + var(--wired, 0) * 0.35)),
+    inset calc(var(--wired, 0) * 4px) 0 18px rgba(255, 255, 255, 0.12);
+  filter: brightness(calc(1 + var(--wired, 0) * 0.28))
+    saturate(calc(1 + var(--wired, 0) * 0.35));
+}
+
+#drunk-overlay.wired .wobble {
+  filter: blur(calc(var(--wired, 0) * 0.6px));
+  animation: wire-jitter 0.08s steps(2) infinite;
+}
+
+@keyframes wire-jitter {
+  0% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(0.6px, -0.4px);
+  }
+  100% {
+    transform: translate(-0.5px, 0.3px);
+  }
+}
+
 #play-tip {
   position: fixed;
   bottom: 1.4rem;
@@ -337,11 +361,175 @@ body {
   );
 }
 
+#cab-portrait {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 12;
+  width: min(11rem, 34vw);
+  pointer-events: none;
+}
+
+.cab-frame {
+  background: rgba(8, 10, 14, 0.88);
+  border: 1px solid rgba(196, 90, 50, 0.4);
+  padding: 0.45rem 0.5rem 0.55rem;
+  box-shadow: 0 0 24px rgba(0, 0, 0, 0.45);
+}
+
+.cab-label {
+  font-size: 0.55rem;
+  letter-spacing: 0.14em;
+  color: var(--dim);
+  margin-bottom: 0.25rem;
+}
+
+.cab-frame .face {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.cab-frame .head {
+  fill: #c4a88a;
+  stroke: #3a2a22;
+  stroke-width: 1.5;
+}
+
+.cab-frame .eye {
+  fill: #f2ebe0;
+}
+
+.cab-frame .pupil {
+  fill: #1a1410;
+}
+
+.cab-frame .bag {
+  fill: none;
+  stroke: #8a6a5a;
+  stroke-width: 1.5;
+}
+
+.cab-frame .mouth {
+  fill: none;
+  stroke: #5a3028;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.cab-frame .stubble {
+  fill: none;
+  stroke: #6a5a4a;
+  stroke-width: 4;
+  opacity: 0.35;
+}
+
+.cab-status {
+  margin-top: 0.3rem;
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
+  color: var(--teal);
+  text-align: center;
+}
+
+#cab-portrait.drunk .head {
+  fill: #b88878;
+}
+
+#cab-portrait.wasted .eye {
+  ry: 2.5;
+}
+
+#cab-portrait.wasted .head {
+  fill: #a8786a;
+}
+
+#cab-portrait.wired .eye {
+  ry: 6.5;
+  fill: #fff8e0;
+}
+
+#cab-portrait.wired {
+  animation: wire-jitter 0.1s steps(2) infinite;
+}
+
+#cab-portrait.wired .cab-status {
+  color: #e8c86a;
+}
+
+#cab-portrait.shaking {
+  animation: tip-pulse 0.35s ease-in-out infinite;
+}
+
+#cab-portrait.shaking .head {
+  fill: #d0c4b8;
+}
+
+#cab-portrait.dead-eyed .pupil {
+  r: 1.2;
+}
+
+#cab-portrait.sip-beer::after,
+#cab-portrait.sip-liquor::after,
+#cab-portrait.sip-coffee::after {
+  content: "";
+  position: absolute;
+  right: 18%;
+  bottom: 28%;
+  width: 18%;
+  height: 32%;
+  border-radius: 3px 3px 2px 2px;
+  animation: raise-sip 0.85s ease;
+}
+
+#cab-portrait.sip-beer::after {
+  background: linear-gradient(180deg, #d4a017, #8a6010);
+}
+
+#cab-portrait.sip-liquor::after {
+  background: linear-gradient(180deg, #7ab, #245);
+  border-radius: 2px;
+}
+
+#cab-portrait.sip-coffee::after {
+  background: linear-gradient(180deg, #6a4a2a, #2a1810);
+  border-radius: 40% 40% 20% 20%;
+}
+
+@keyframes raise-sip {
+  0% {
+    transform: translateY(40%) rotate(12deg);
+    opacity: 0;
+  }
+  35% {
+    transform: translateY(0) rotate(-8deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(10%) rotate(0deg);
+    opacity: 0;
+  }
+}
+
+#pulloff.strip-club {
+  background:
+    radial-gradient(ellipse at 50% 30%, rgba(255, 50, 140, 0.22), transparent 50%),
+    linear-gradient(180deg, rgba(20, 8, 18, 0.85), rgba(8, 6, 12, 0.94));
+}
+
 @media (max-width: 640px) {
   #meters {
     max-width: none;
   }
   .brand {
     font-size: 2.4rem;
+  }
+  #cab-portrait {
+    width: 7.5rem;
+    right: 0.5rem;
+    bottom: 0.5rem;
+  }
+  #play-tip {
+    bottom: 7.5rem;
   }
 }

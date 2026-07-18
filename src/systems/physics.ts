@@ -11,18 +11,21 @@ export interface TruckState {
 
 export interface DriveInput {
   throttle: number; // -1..1
-  steer: number; // -1..1
+  /** Desired steer -1..1 (keyboard / mouse). */
+  steer: number;
   dt: number;
   steeringLag: number;
+  /** Extra sway from being drunk (applied after lag filter). */
+  drunkSway: number;
   laneHalfWidth: number;
 }
 
-export const MAX_SPEED = 38; // ~85 mph
+export const MAX_SPEED = 36; // ~80 mph
 /** Idle highway cruise so the haul moves without holding W. */
 export const CRUISE_SPEED = 24; // ~54 mph
-export const ACCEL = 14;
-export const BRAKE = 22;
-export const DRAG = 0.35;
+export const ACCEL = 12;
+export const BRAKE = 20;
+export const DRAG = 0.3;
 
 export function createTruck(z = 0): TruckState {
   return {
@@ -39,46 +42,50 @@ export function stepTruck(t: TruckState, input: DriveInput): TruckState {
   const next = { ...t };
   const { dt, steeringLag, laneHalfWidth } = input;
 
-  // Lagged steering — higher lag = drunker / shakier
-  const lag = Math.max(0.02, steeringLag);
+  // Soft steer response — small inputs, easy to hold a lane
+  const lag = Math.max(0.05, steeringLag);
   const alpha = 1 - Math.exp(-dt / lag);
-  next.steer += (input.steer - next.steer) * alpha;
+  const targetSteer = Math.max(-1, Math.min(1, input.steer));
+  next.steer += (targetSteer - next.steer) * alpha;
 
-  // Cruise-by-default: coast toward cruise unless braking or boosting
+  // Cruise-by-default
   if (input.throttle > 0.05) {
     next.speed += input.throttle * ACCEL * dt;
   } else if (input.throttle < -0.05) {
     next.speed += input.throttle * BRAKE * dt;
   } else {
     const err = CRUISE_SPEED - next.speed;
-    next.speed += err * Math.min(1, dt * 1.8);
+    next.speed += err * Math.min(1, dt * 1.6);
   }
   next.speed -= DRAG * dt;
   next.speed = Math.max(0, Math.min(MAX_SPEED, next.speed));
 
-  // Yaw from steer * speed
-  const turnRate = next.steer * (0.55 + next.speed * 0.02);
+  // Subtle turn rate — like a real driving game, not a tank
+  const baseTurn = 0.18 + next.speed * 0.006;
+  const drunkBoost = 1 + input.drunkSway * 1.4;
+  const turnRate = (next.steer * baseTurn + input.drunkSway * 0.08) * drunkBoost;
   next.yaw += turnRate * dt;
+  // Keep yaw sane so the chase cam never wraps into nonsense
+  if (next.yaw > Math.PI) next.yaw -= Math.PI * 2;
+  if (next.yaw < -Math.PI) next.yaw += Math.PI * 2;
 
-  // Integrate position (yaw 0 = +Z forward)
   next.x += Math.sin(next.yaw) * next.speed * dt;
   next.z += Math.cos(next.yaw) * next.speed * dt;
 
-  // Soft lane walls
-  const limit = laneHalfWidth - 1.2;
+  // Soft lane centering walls — gentle push, not a hard flip
+  const limit = laneHalfWidth - 1.4;
   if (next.x > limit) {
     next.x = limit;
-    next.yaw *= 0.85;
-    next.steer *= 0.5;
+    next.yaw *= 0.92;
+    next.steer *= 0.7;
   } else if (next.x < -limit) {
     next.x = -limit;
-    next.yaw *= 0.85;
-    next.steer *= 0.5;
+    next.yaw *= 0.92;
+    next.steer *= 0.7;
   }
 
-  // Trailer sway
-  const swayTarget = next.yaw - next.steer * 0.15;
-  next.trailerYaw += (swayTarget - next.trailerYaw) * Math.min(1, dt * 3);
+  const swayTarget = next.yaw - next.steer * 0.08;
+  next.trailerYaw += (swayTarget - next.trailerYaw) * Math.min(1, dt * 2.5);
 
   return next;
 }
@@ -87,7 +94,6 @@ export function speedMph(t: TruckState): number {
   return t.speed * 2.23694;
 }
 
-/** Off-road / hard crash if lateral error huge or yaw wild. */
 export function isCrashing(t: TruckState, laneHalfWidth: number): boolean {
-  return Math.abs(t.x) > laneHalfWidth + 0.5 || Math.abs(t.yaw) > 1.1;
+  return Math.abs(t.x) > laneHalfWidth + 0.8 || Math.abs(t.yaw) > 0.95;
 }

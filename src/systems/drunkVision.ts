@@ -1,6 +1,6 @@
-import * as THREE from "three";
+import type { PerspectiveCamera } from "three";
 
-/** CSS/DOM overlay + camera shake driven by BAC — clip identity. */
+/** CSS overlay + light camera nudge — never set camera.rotation after lookAt (gimbal flip). */
 
 export interface DrunkVision {
   overlay: HTMLDivElement;
@@ -25,31 +25,31 @@ export function applyDrunkVision(
   opts: {
     intensity: number;
     tremor: number;
+    wired: number;
     microSleep: boolean;
-    camera: THREE.PerspectiveCamera;
+    camera: PerspectiveCamera;
     time: number;
+    /** Horizontal look offset in world units (applied by caller via lookAt). */
+    lookNudge: { x: number; y: number };
   },
 ): void {
-  const { intensity, tremor, microSleep, camera, time } = opts;
-  const i = Math.max(0, Math.min(1.5, intensity));
+  const { intensity, tremor, wired, microSleep, time, lookNudge } = opts;
+  const drunk = Math.max(0, Math.min(1.4, intensity));
+  const wire = Math.max(0, Math.min(1, wired));
 
-  // Cap darkness — distortion/blur without blacking out the road
-  const visual = Math.min(1.1, i);
-  vision.overlay.style.setProperty("--dv", String(visual));
+  vision.overlay.style.setProperty("--dv", String(drunk));
   vision.overlay.style.setProperty("--tremor", String(tremor));
-  vision.overlay.classList.toggle("active", visual > 0.04 || tremor > 0.04);
+  vision.overlay.style.setProperty("--wired", String(wire));
+  vision.overlay.classList.toggle("active", drunk > 0.05 || tremor > 0.05 || wire > 0.08);
   vision.overlay.classList.toggle("microsleep", microSleep);
-  vision.overlay.classList.toggle("withdrawal", tremor > 0.15);
+  vision.overlay.classList.toggle("withdrawal", tremor > 0.12);
+  vision.overlay.classList.toggle("wired", wire > 0.15);
 
-  vision.ghost.style.opacity = String(Math.min(0.5, visual * 0.4));
-  vision.ghost.style.transform = `translate(${(Math.sin(time * 1.7) * 10 * visual).toFixed(1)}px, ${(Math.cos(time * 1.3) * 5 * visual).toFixed(1)}px)`;
+  // Double-vision ghost — stronger when drunk
+  vision.ghost.style.opacity = String(Math.min(0.55, drunk * 0.42));
+  vision.ghost.style.transform = `translate(${(Math.sin(time * 1.7) * 14 * drunk).toFixed(1)}px, ${(Math.cos(time * 1.3) * 7 * drunk).toFixed(1)}px)`;
 
-  const wobbleX = Math.sin(time * 2.1) * 0.014 * visual;
-  const wobbleY = Math.cos(time * 1.6) * 0.01 * visual;
-  const shake =
-    tremor > 0
-      ? (Math.sin(time * 28) * 0.025 + Math.sin(time * 41) * 0.018) * tremor
-      : 0;
-  camera.rotation.z = wobbleX + shake;
-  camera.position.y += wobbleY * 0.5;
+  // Feed look-target nudge (caller applies) — no camera.rotation writes
+  lookNudge.x = Math.sin(time * 1.9) * 0.35 * drunk + Math.sin(time * 31) * 0.12 * tremor;
+  lookNudge.y = Math.cos(time * 1.4) * 0.12 * drunk + (wire > 0 ? Math.sin(time * 22) * 0.08 * wire : 0);
 }

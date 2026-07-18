@@ -7,7 +7,12 @@ export interface HUD {
   setPlaying: (m: MeterState, inv: Inventory, quota: number, lag: number) => void;
   showTitle: (show: boolean) => void;
   showDeath: (card: DeathCard | null) => void;
-  showPulloff: (show: boolean, m: MeterState, inv: Inventory) => void;
+  showPulloff: (
+    show: boolean,
+    m: MeterState,
+    inv: Inventory,
+    stripClub?: boolean,
+  ) => void;
   showHowTo: (show: boolean) => void;
   showTip: (text: string | null, urgent?: boolean) => void;
   onStart: (() => void) | null;
@@ -26,7 +31,7 @@ export function createHUD(parent: HTMLElement): HUD {
       <p class="tagline">Stay drunk enough to function.<br/>Sober enough to drive.<br/>Employed enough to eat.</p>
       <button type="button" id="btn-start" class="cta">Start haul</button>
       <button type="button" id="btn-howto" class="ghost">How to play</button>
-      <p class="hint">A / D steer · cruise is automatic · 1 beer · 2 liquor · 3 coffee · P pull-off</p>
+      <p class="hint">A / D or mouse steer · cruise on · 1 beer · 2 liquor · 3 coffee · ~5 min to Lucy’s</p>
     </div>
     <div id="howto" class="panel hidden">
       <h2>How to play</h2>
@@ -56,7 +61,7 @@ export function createHUD(parent: HTMLElement): HUD {
       <button type="button" id="btn-restart" class="cta">Another haul</button>
     </div>
     <div id="pulloff" class="panel hidden">
-      <h2>Pull-off</h2>
+      <h2 id="pulloff-title">Pull-off</h2>
       <p id="pulloff-blurb">Sodium lights. The ice machine is dying.</p>
       <div class="shop">
         <button type="button" data-buy="beer">Beer $4</button>
@@ -114,11 +119,14 @@ export function createHUD(parent: HTMLElement): HUD {
       (root.querySelector("#death-tip") as HTMLElement).textContent = card.tip;
       root.querySelector("#meters")?.classList.add("hidden");
     },
-    showPulloff(show, m, inv) {
+    showPulloff(show, m, inv, stripClub = false) {
       const el = root.querySelector("#pulloff") as HTMLElement;
       el.classList.toggle("hidden", !show);
+      el.classList.toggle("strip-club", stripClub);
       if (show) {
         (root.querySelector("#pulloff-cash") as HTMLElement).textContent = String(m.cash);
+        const title = root.querySelector("#pulloff-title");
+        if (title) title.textContent = stripClub ? "Lucky Lucy's" : "Pull-off";
         void inv;
       }
     },

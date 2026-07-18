@@ -1,7 +1,16 @@
 /** Dark comedy dispatch + radio lines. Tone checkpoint material. */
 
+/** First-haul tutorial — plays in order before generic chatter. */
+export const STORY_LINES: string[] = [
+  "Dispatch: Load 447. Reno by dawn. Stay in the pocket — too sober kills you, too drunk kills the load.",
+  "Dispatch: Cooler’s stocked for Lucy’s. That’s five minutes if you sip, not chug.",
+  "CB: BAC drains while you drive. Tap 1 for beer when the bar slides left of the notch.",
+  "Radio ad: Lucky Lucy’s — pink neon, cold cans, no questions. Next exit that isn’t a church.",
+  "Dispatch: Coffee (3) wires you bright. Liquor (2) floats the wheel. Learn which devil you need.",
+  "CB: If the road swims, you overdid it. If your hands shake, you underdid it.",
+];
+
 export const DISPATCH_LINES: string[] = [
-  "Dispatch: Load 447. Reno by dawn. Don't make me call your mother.",
   "Dispatch: You're burning daylight you don't have. Move.",
   "Dispatch: Cargo's fragile. Unlike your liver.",
   "CB: Anybody copy? Got a ghost deer on 80 westbound. Again.",

@@ -28,15 +28,17 @@ npm test
 
 | Key | Action |
 |---|---|
-| A / D or ← → | Steer |
+| A / D or ← → / mouse | Steer (subtle; mouse = fine adjust) |
 | W / S or ↑ ↓ | Boost / brake (cruise is automatic) |
 | 1 | Beer |
 | 2 | Liquor |
 | 3 | Coffee |
 | P | Pull-off (shop / sleep) |
 
+First stop: **Lucky Lucy’s** strip club ~5 minutes in (mile ~4.5). Neon lights up on the right as you approach; dispatch cues the exit.
+
 ## Week-sprint scope
 
-Browser vertical slice: highway drive + BAC pocket + drunk-vision + death cards + menu pull-off. No cops, no 3D hubs, no Steam wrapper yet.
+Browser vertical slice: highway drive + BAC pocket + drunk-vision + cab cam + first strip-club restock. No cops, no walkable hubs, no Steam wrapper yet.
 
 See `SPRINT.md` and `AGENTS.md`.
