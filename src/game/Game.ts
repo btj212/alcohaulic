@@ -52,7 +52,6 @@ export class Game {
   private renderer: THREE.WebGLRenderer;
   private scene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
-  private cameraRig: THREE.Group;
   private clock = new THREE.Clock();
   private truck!: TruckState;
   private truckMesh!: THREE.Group;
@@ -99,15 +98,13 @@ export class Game {
     this.scene.background = new THREE.Color(0x0c1018);
     this.scene.fog = new THREE.FogExp2(0x121826, 0.014);
 
-    this.cameraRig = new THREE.Group();
-    this.scene.add(this.cameraRig);
     this.camera = new THREE.PerspectiveCamera(
       55,
       window.innerWidth / window.innerHeight,
       0.1,
       280,
     );
-    this.cameraRig.add(this.camera);
+    this.scene.add(this.camera);
 
     this.hemi = new THREE.HemisphereLight(0x6a7a99, 0x1a1410, 1.15);
     this.scene.add(this.hemi);
@@ -132,7 +129,7 @@ export class Game {
     this.truck = createTruck();
     syncTruckMesh(this.truckMesh, this.truck);
     updateHighway(this.highway, this.truck.z);
-    this.cameraRig.position.set(0, 4.4, -12);
+    this.camera.position.set(0, 5, -14);
 
     this.bindInput();
     this.bindHUD();
@@ -303,34 +300,36 @@ export class Game {
   }
 
   private placeCamera(t: number, playing: boolean): void {
-    const behind = 12;
-    const height = 4.4;
+    // Chase cam: sit behind the cab (+Z is forward when yaw=0).
+    // Must call lookAt on the Camera (not a Group) — Group.lookAt faces +Z,
+    // cameras look down -Z, so a rig.lookAt flips the view backwards.
+    const behind = 14;
+    const height = 5.2;
     const yaw = this.truck.yaw;
     const camX = this.truck.x - Math.sin(yaw) * behind;
     const camZ = this.truck.z - Math.cos(yaw) * behind;
 
     if (playing) {
-      this.cameraRig.position.x += (camX - this.cameraRig.position.x) * 0.14;
-      this.cameraRig.position.y += (height - this.cameraRig.position.y) * 0.14;
-      this.cameraRig.position.z += (camZ - this.cameraRig.position.z) * 0.14;
+      this.camera.position.x += (camX - this.camera.position.x) * 0.16;
+      this.camera.position.y += (height - this.camera.position.y) * 0.16;
+      this.camera.position.z += (camZ - this.camera.position.z) * 0.16;
     } else {
-      this.cameraRig.position.set(
+      this.camera.position.set(
         this.truck.x + Math.sin(t * 0.12) * 1.2,
         height,
         this.truck.z - behind,
       );
     }
 
+    // Look at the cab / just ahead so the truck stays in frame
     const lookX =
       this.truck.x +
-      Math.sin(yaw) * 10 +
+      Math.sin(yaw) * 4 +
       (playing ? this.lookNudge.x : 0);
-    const lookY = 1.5 + (playing ? this.lookNudge.y : 0);
-    const lookZ = this.truck.z + Math.cos(yaw) * 10;
-    this.cameraRig.lookAt(lookX, lookY, lookZ);
-    // Camera stays identity under the rig — no Euler after lookAt
-    this.camera.rotation.set(0, 0, 0);
-    this.camera.position.set(0, 0, 0);
+    const lookY = 2.2 + (playing ? this.lookNudge.y : 0);
+    const lookZ = this.truck.z + Math.cos(yaw) * 4;
+    this.camera.up.set(0, 1, 0);
+    this.camera.lookAt(lookX, lookY, lookZ);
   }
 
   private frame(): void {
