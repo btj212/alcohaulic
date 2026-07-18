@@ -1,0 +1,47 @@
+import type { DeathCause } from "../systems/meters";
+
+export interface DeathCard {
+  headline: string;
+  sub: string;
+  tip: string;
+}
+
+export function deathCardFor(
+  cause: DeathCause,
+  miles: number,
+  drinks: number,
+): DeathCard {
+  const mile = Math.floor(miles);
+  switch (cause) {
+    case "withdrawal":
+      return {
+        headline: "DIED OF SOBRIETY",
+        sub: `Mile ${mile} · ${drinks} drinks this haul`,
+        tip: "The pocket closed. Next time, sip earlier.",
+      };
+    case "seizure":
+      return {
+        headline: "SEIZED ON THE INTERSTATE",
+        sub: `Mile ${mile} · floor rose; you didn't`,
+        tip: "Tolerance is a one-way road.",
+      };
+    case "blackout":
+      return {
+        headline: "BLACKED OUT",
+        sub: `Mile ${mile} · woke up with consequences`,
+        tip: "Too high above the pocket. The road remembered.",
+      };
+    case "crash":
+      return {
+        headline: "SLEPT INTO THE GUARDRAIL",
+        sub: `Mile ${mile} · alertness zero`,
+        tip: "Coffee, a pull-off, or a shorter night.",
+      };
+    case "fired":
+      return {
+        headline: "TERMINATED",
+        sub: `Mile ${mile} · cargo / clock / patience gone`,
+        tip: "Dispatch doesn't do second chances. Runs do.",
+      };
+  }
+}
