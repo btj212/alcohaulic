@@ -8,6 +8,7 @@ import {
   buyItem,
   checkFired,
   drunkVisionIntensity,
+  needsSip,
   steeringLagFromBac,
   tickMeters,
   tremorIntensity,
@@ -27,6 +28,12 @@ import { createHighway, updateHighway } from "../systems/highway";
 import { applyDrunkVision, createDrunkVision } from "../systems/drunkVision";
 import { createDeer, updateDeer } from "../systems/deer";
 import { createRadio, unmuteRadio, updateRadio } from "../systems/radio";
+import {
+  createCabAudio,
+  playSipSound,
+  startCabAudio,
+  updateCabAudio,
+} from "../systems/cabAudio";
 import { createTruckMesh, syncTruckMesh } from "../render/truck";
 import { createHUD, setHudSpeed } from "../ui/hud";
 import { deathCardFor } from "../content/deathCopy";
@@ -34,7 +41,7 @@ import { PULLOFF_LINES, pickLine } from "../content/dispatch";
 
 type Phase = "title" | "playing" | "pulloff" | "dead" | "won";
 
-const HAUL_QUOTA = 12; // miles — ~3–6 min at highway speed with drama
+const HAUL_QUOTA = 12;
 const PRICES: Record<Consumable, number> = { beer: 4, liquor: 12, coffee: 3 };
 
 export class Game {
@@ -53,12 +60,15 @@ export class Game {
   private hud = createHUD(document.body);
   private vision = createDrunkVision(document.body);
   private radio = createRadio(document.body);
+  private cabAudio = createCabAudio();
   private microSleep = false;
   private microTimer = 0;
   private night = 1;
   private sun!: THREE.DirectionalLight;
   private hemi!: THREE.HemisphereLight;
+  private mood!: THREE.PointLight;
   private pulloffIndex = 0;
+  private tipTimer = 0;
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({
@@ -69,10 +79,12 @@ export class Game {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.35;
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x05060a);
-    this.scene.fog = new THREE.FogExp2(0x0a0c14, 0.028);
+    this.scene.background = new THREE.Color(0x0c1018);
+    this.scene.fog = new THREE.FogExp2(0x121826, 0.014);
 
     this.camera = new THREE.PerspectiveCamera(
       55,
@@ -81,23 +93,30 @@ export class Game {
       220,
     );
 
-    this.hemi = new THREE.HemisphereLight(0x1a2030, 0x0a0806, 0.55);
+    this.hemi = new THREE.HemisphereLight(0x6a7a99, 0x1a1410, 1.15);
     this.scene.add(this.hemi);
-    this.sun = new THREE.DirectionalLight(0x6a7a99, 0.35);
+    this.sun = new THREE.DirectionalLight(0xa8b8d0, 0.85);
     this.sun.position.set(-20, 40, 10);
     this.scene.add(this.sun);
 
-    // Teal sodium mood light
-    const mood = new THREE.PointLight(0x3a8a8a, 1.2, 80);
-    mood.position.set(0, 12, 0);
-    this.scene.add(mood);
+    this.mood = new THREE.PointLight(0x5aa8a8, 2.4, 100);
+    this.mood.position.set(0, 14, 0);
+    this.scene.add(this.mood);
+
+    // Ambient fill so title/idle isn't a black void before headlights read
+    const fill = new THREE.AmbientLight(0x2a3040, 0.45);
+    this.scene.add(fill);
 
     this.scene.add(this.highway.group);
-    this.truckMesh = createTruckMesh();
+    const built = createTruckMesh();
+    this.truckMesh = built.mesh;
     this.scene.add(this.truckMesh);
     this.scene.add(this.deer.mesh);
 
     this.truck = createTruck();
+    syncTruckMesh(this.truckMesh, this.truck);
+    updateHighway(this.highway, this.truck.z);
+
     this.bindInput();
     this.bindHUD();
 
@@ -108,13 +127,17 @@ export class Game {
   private bindHUD(): void {
     this.hud.onStart = () => {
       unmuteRadio(this.radio);
+      startCabAudio(this.cabAudio);
       this.resetRun();
       this.phase = "playing";
+      this.tipTimer = 5.5;
       this.hud.showTitle(false);
       this.hud.showDeath(null);
+      this.hud.showTip("You're rolling. A/D steer · 1 beer when BAC drops");
     };
     this.hud.onRestart = () => {
       this.hud.showDeath(null);
+      this.hud.showTip(null);
       this.hud.showTitle(true);
       this.phase = "title";
     };
@@ -145,6 +168,13 @@ export class Game {
 
   private bindInput(): void {
     window.addEventListener("keydown", (e) => {
+      if (
+        ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Space"].includes(
+          e.code,
+        )
+      ) {
+        e.preventDefault();
+      }
       this.keys.add(e.code);
       if (this.phase !== "playing") return;
       if (e.code === "Digit1") this.consume("beer");
@@ -164,6 +194,8 @@ export class Game {
     if (ok) {
       this.meters = meters;
       this.inventory = inventory;
+      playSipSound(this.cabAudio);
+      if (item !== "coffee") this.hud.showTip(null);
     }
   }
 
@@ -189,8 +221,8 @@ export class Game {
   private die(cause: DeathCause): void {
     if (this.phase === "dead") return;
     this.phase = "dead";
+    this.hud.showTip(null);
     if (cause === "blackout") {
-      // Soft fail: wake with consequences, then death card still (run ends)
       this.meters = applyJobProgress(this.meters, {
         onTime: false,
         crashed: true,
@@ -229,20 +261,26 @@ export class Game {
     if (this.phase === "playing") {
       this.tickPlay(dt, t);
     } else {
-      // Idle camera drift on title
-      this.camera.position.set(
-        Math.sin(t * 0.15) * 6,
-        4,
-        this.truck.z - 12,
-      );
-      this.camera.lookAt(this.truck.x, 1.5, this.truck.z);
+      // Idle: still show the lit highway so the title isn't a black void
+      this.truck.z += dt * 6;
+      syncTruckMesh(this.truckMesh, this.truck);
       updateHighway(this.highway, this.truck.z);
+      const behind = 11;
+      const height = 4.2;
+      this.camera.position.set(
+        this.truck.x + Math.sin(t * 0.12) * 1.2,
+        height,
+        this.truck.z - behind,
+      );
+      this.camera.lookAt(this.truck.x, 1.5, this.truck.z + 10);
     }
 
-    // Mood: night-heavy
+    this.mood.position.set(this.truck.x, 14, this.truck.z + 8);
+
     const fog = this.scene.fog as THREE.FogExp2;
-    fog.density = 0.024 + this.night * 0.01;
-    this.hemi.intensity = 0.35 + (1 - this.night) * 0.4;
+    fog.density = 0.012 + this.night * 0.006;
+    this.hemi.intensity = 0.85 + (1 - this.night) * 0.45;
+    this.sun.intensity = 0.55 + (1 - this.night) * 0.5;
 
     this.renderer.render(this.scene, this.camera);
   }
@@ -273,7 +311,6 @@ export class Game {
     syncTruckMesh(this.truckMesh, this.truck);
     updateHighway(this.highway, this.truck.z);
 
-    // Chase cam
     const behind = 11;
     const height = 4.2;
     const camX = this.truck.x - Math.sin(this.truck.yaw) * behind;
@@ -310,19 +347,42 @@ export class Game {
       dt,
     });
 
+    const visionI = drunkVisionIntensity(this.meters);
+    const tremor = tremorIntensity(this.meters);
     applyDrunkVision(this.vision, {
-      intensity: drunkVisionIntensity(this.meters),
-      tremor: tremorIntensity(this.meters),
+      intensity: visionI,
+      tremor,
       microSleep: this.microSleep,
       camera: this.camera,
       time: t,
     });
 
+    const withdrawal = Math.max(
+      0,
+      (this.meters.floor + 0.04 - this.meters.bac) / Math.max(0.08, this.meters.floor),
+    );
+    updateCabAudio(this.cabAudio, { speedMph: mph, withdrawal, dt });
+
     updateRadio(this.radio, dt, true);
     this.hud.setPlaying(this.meters, this.inventory, HAUL_QUOTA, lag);
     setHudSpeed(this.hud, mph, this.meters.miles, lag);
 
-    // Fail states
+    // Opening tip, then sip lever when BAC slides toward the floor
+    if (this.tipTimer > 0) {
+      this.tipTimer -= dt;
+      if (this.tipTimer <= 0) this.hud.showTip(null);
+    } else if (needsSip(this.meters)) {
+      const urgent = this.meters.bac < this.meters.floor;
+      this.hud.showTip(
+        urgent
+          ? "HANDS SHAKING — press 1 for beer or 2 for liquor"
+          : "BAC dropping — press 1 to sip",
+        urgent,
+      );
+    } else {
+      this.hud.showTip(null);
+    }
+
     if (isCrashing(this.truck, this.highway.laneHalfWidth)) {
       this.die("crash");
       return;
@@ -336,9 +396,9 @@ export class Game {
       return;
     }
 
-    // Win haul
     if (this.meters.miles >= HAUL_QUOTA) {
       this.phase = "won";
+      this.hud.showTip(null);
       this.hud.showDeath({
         headline: "LOAD DELIVERED",
         sub: `Mile ${Math.floor(this.meters.miles)} · still employed, still thirsty`,
@@ -346,7 +406,6 @@ export class Game {
       });
     }
 
-    // Dawn creeps (visual only) as miles accumulate
     this.night = Math.max(0.35, 1 - this.meters.miles / (HAUL_QUOTA * 1.4));
   }
 }

@@ -22,8 +22,14 @@ export function deathCardFor(
     case "seizure":
       return {
         headline: "SEIZED ON THE INTERSTATE",
-        sub: `Mile ${mile} · floor rose; you didn't`,
-        tip: "Tolerance is a one-way road.",
+        sub:
+          drinks > 0
+            ? `Mile ${mile} · floor rose; you didn't`
+            : `Mile ${mile} · you let the pocket drain dry`,
+        tip:
+          drinks > 0
+            ? "Tolerance is a one-way road."
+            : "Sip earlier. Press 1 before your hands start shaking.",
       };
     case "blackout":
       return {

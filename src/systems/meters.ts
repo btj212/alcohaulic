@@ -29,12 +29,12 @@ export interface Inventory {
 }
 
 export const DEFAULT_METERS: MeterState = {
-  bac: 0.28,
-  alertness: 0.85,
+  bac: 0.36,
+  alertness: 0.9,
   jobStanding: 1,
   floor: 0.12,
   ceiling: 0.78,
-  pocketCenter: 0.32,
+  pocketCenter: 0.36,
   drinksTaken: 0,
   miles: 0,
   cash: 86,
@@ -71,11 +71,12 @@ export function steeringLagFromBac(m: MeterState): number {
 }
 
 export function drunkVisionIntensity(m: MeterState): number {
-  if (m.bac <= m.floor) return 0.55 + (m.floor - m.bac) * 2;
+  // Distortion rises at extremes, but stays readable on the road
+  if (m.bac <= m.floor) return 0.35 + (m.floor - m.bac) * 1.2;
   if (m.bac >= m.ceiling * 0.85) {
-    return 0.4 + ((m.bac - m.ceiling * 0.85) / 0.15) * 0.6;
+    return 0.35 + ((m.bac - m.ceiling * 0.85) / 0.15) * 0.55;
   }
-  return pocketStress(m) * 0.35 + Math.max(0, m.bac - 0.4) * 0.5;
+  return pocketStress(m) * 0.28 + Math.max(0, m.bac - 0.4) * 0.4;
 }
 
 export function tremorIntensity(m: MeterState): number {
@@ -100,18 +101,18 @@ export interface TickResult {
 export function tickMeters(m: MeterState, input: TickInput): TickResult {
   const next: MeterState = { ...m };
 
-  // BAC drains faster when not actively "holding" with sips; baseline metabolic drain.
-  const drain = input.consuming ? 0.004 : 0.012;
+  // Metabolic drain — slow enough to learn the pocket before a death spiral.
+  const drain = input.consuming ? 0.003 : 0.0075;
   next.bac = Math.max(0, next.bac - drain * input.dt);
 
   // Alertness: miles + night + high BAC hangover fog.
   const mileRate = (input.speedMph / 3600) * input.dt; // miles this frame
   next.miles += mileRate;
   const fatigue =
-    0.008 * input.dt +
-    mileRate * 0.015 +
-    input.nightFactor * 0.01 * input.dt +
-    Math.max(0, next.bac - 0.55) * 0.02 * input.dt;
+    0.005 * input.dt +
+    mileRate * 0.012 +
+    input.nightFactor * 0.006 * input.dt +
+    Math.max(0, next.bac - 0.55) * 0.015 * input.dt;
   next.alertness = clamp01(next.alertness - fatigue);
 
   let death: DeathCause | null = null;
@@ -125,10 +126,10 @@ export function tickMeters(m: MeterState, input: TickInput): TickResult {
     next.alertness = 0;
   }
 
-  // Withdrawal spiral → seizure
+  // Withdrawal spiral → seizure (deep below floor, not a hair-trigger)
   if (next.bac <= 0) {
     death = "withdrawal";
-  } else if (next.bac < next.floor * 0.35) {
+  } else if (next.bac < next.floor * 0.2) {
     death = "seizure";
   }
 
@@ -137,6 +138,11 @@ export function tickMeters(m: MeterState, input: TickInput): TickResult {
   }
 
   return { meters: next, death, microSleep };
+}
+
+/** True when BAC is sliding toward the floor — time to sip. */
+export function needsSip(m: MeterState): boolean {
+  return m.bac < m.floor + 0.06;
 }
 
 export type Consumable = "beer" | "liquor" | "coffee";

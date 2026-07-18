@@ -27,8 +27,9 @@ function makeChunk(seed: number, z0: number): THREE.Group {
   const asphalt = new THREE.Mesh(
     new THREE.PlaneGeometry(LANE_HALF * 2 + 2, CHUNK_LEN),
     new THREE.MeshStandardMaterial({
-      color: 0x1a1a22,
-      roughness: 0.95,
+      color: 0x2a2a35,
+      roughness: 0.92,
+      metalness: 0.05,
       flatShading: true,
     }),
   );
@@ -42,7 +43,7 @@ function makeChunk(seed: number, z0: number): THREE.Group {
     const shoulder = new THREE.Mesh(
       new THREE.PlaneGeometry(14, CHUNK_LEN),
       new THREE.MeshStandardMaterial({
-        color: 0x2a2418,
+        color: 0x3a3224,
         roughness: 1,
         flatShading: true,
       }),
@@ -52,29 +53,32 @@ function makeChunk(seed: number, z0: number): THREE.Group {
     g.add(shoulder);
   }
 
-  // Center dashes
+  // Center dashes — emissive so they read at night
   const dashMat = new THREE.MeshStandardMaterial({
-    color: 0xc9a227,
-    emissive: 0x3a2a00,
+    color: 0xe8c84a,
+    emissive: 0x665010,
+    emissiveIntensity: 0.85,
     flatShading: true,
   });
   for (let i = 0; i < 8; i++) {
-    const dash = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.04, 3.5), dashMat);
-    dash.position.set(0, 0.03, 6 + i * 10);
+    const dash = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.05, 3.5), dashMat);
+    dash.position.set(0, 0.04, 6 + i * 10);
     g.add(dash);
   }
 
   // Edge lines
   const edgeMat = new THREE.MeshStandardMaterial({
-    color: 0x8899aa,
+    color: 0xc8d4e0,
+    emissive: 0x334455,
+    emissiveIntensity: 0.55,
     flatShading: true,
   });
   for (const side of [-1, 1]) {
     const edge = new THREE.Mesh(
-      new THREE.BoxGeometry(0.15, 0.04, CHUNK_LEN * 0.95),
+      new THREE.BoxGeometry(0.18, 0.05, CHUNK_LEN * 0.95),
       edgeMat,
     );
-    edge.position.set(side * LANE_HALF, 0.03, CHUNK_LEN / 2);
+    edge.position.set(side * LANE_HALF, 0.04, CHUNK_LEN / 2);
     g.add(edge);
   }
 
@@ -85,17 +89,18 @@ function makeChunk(seed: number, z0: number): THREE.Group {
     const side = rng() > 0.5 ? 1 : -1;
     const pole = new THREE.Mesh(
       new THREE.BoxGeometry(0.2, 3.2, 0.2),
-      new THREE.MeshStandardMaterial({ color: 0x555560, flatShading: true }),
+      new THREE.MeshStandardMaterial({ color: 0x6a6a78, flatShading: true }),
     );
     pole.position.set(side * (LANE_HALF + 3.5), 1.6, z);
     g.add(pole);
 
-    if (rng() > 0.55) {
+    if (rng() > 0.45) {
       const sign = new THREE.Mesh(
         new THREE.BoxGeometry(1.4, 0.7, 0.08),
         new THREE.MeshStandardMaterial({
-          color: 0x2d5a3d,
-          emissive: 0x0a1a10,
+          color: 0x3d7a4d,
+          emissive: 0x1a3a22,
+          emissiveIntensity: 0.6,
           flatShading: true,
         }),
       );
@@ -104,18 +109,27 @@ function makeChunk(seed: number, z0: number): THREE.Group {
     }
   }
 
-  // Occasional billboard / sodium light
-  if (rng() > 0.4) {
+  // Sodium streetlights — brighter, more frequent
+  if (rng() > 0.2) {
+    const side = rng() > 0.5 ? 1 : -1;
+    const lz = CHUNK_LEN * (0.35 + rng() * 0.4);
     const lightPole = new THREE.Mesh(
       new THREE.CylinderGeometry(0.12, 0.15, 7, 5),
-      new THREE.MeshStandardMaterial({ color: 0x333340, flatShading: true }),
+      new THREE.MeshStandardMaterial({ color: 0x444450, flatShading: true }),
     );
-    const side = rng() > 0.5 ? 1 : -1;
-    lightPole.position.set(side * (LANE_HALF + 5), 3.5, CHUNK_LEN * 0.6);
+    lightPole.position.set(side * (LANE_HALF + 5), 3.5, lz);
     g.add(lightPole);
-    const lamp = new THREE.PointLight(0xffaa66, 2.2, 40, 2);
-    lamp.position.set(side * (LANE_HALF + 4), 6.5, CHUNK_LEN * 0.6);
+
+    const lamp = new THREE.PointLight(0xffb86a, 4.5, 55, 1.6);
+    lamp.position.set(side * (LANE_HALF + 4), 6.8, lz);
     g.add(lamp);
+
+    const glow = new THREE.Mesh(
+      new THREE.SphereGeometry(0.35, 6, 6),
+      new THREE.MeshBasicMaterial({ color: 0xffcc88 }),
+    );
+    glow.position.copy(lamp.position);
+    g.add(glow);
   }
 
   return g;

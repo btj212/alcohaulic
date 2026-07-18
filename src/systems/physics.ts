@@ -18,16 +18,18 @@ export interface DriveInput {
 }
 
 export const MAX_SPEED = 38; // ~85 mph
-export const ACCEL = 12;
-export const BRAKE = 18;
-export const DRAG = 1.8;
+/** Idle highway cruise so the haul moves without holding W. */
+export const CRUISE_SPEED = 24; // ~54 mph
+export const ACCEL = 14;
+export const BRAKE = 22;
+export const DRAG = 0.35;
 
 export function createTruck(z = 0): TruckState {
   return {
     x: 0,
     z,
     yaw: 0,
-    speed: 22,
+    speed: CRUISE_SPEED,
     steer: 0,
     trailerYaw: 0,
   };
@@ -42,11 +44,14 @@ export function stepTruck(t: TruckState, input: DriveInput): TruckState {
   const alpha = 1 - Math.exp(-dt / lag);
   next.steer += (input.steer - next.steer) * alpha;
 
-  // Accel / brake / drag
-  if (input.throttle >= 0) {
+  // Cruise-by-default: coast toward cruise unless braking or boosting
+  if (input.throttle > 0.05) {
     next.speed += input.throttle * ACCEL * dt;
-  } else {
+  } else if (input.throttle < -0.05) {
     next.speed += input.throttle * BRAKE * dt;
+  } else {
+    const err = CRUISE_SPEED - next.speed;
+    next.speed += err * Math.min(1, dt * 1.8);
   }
   next.speed -= DRAG * dt;
   next.speed = Math.max(0, Math.min(MAX_SPEED, next.speed));

@@ -9,6 +9,7 @@ export interface HUD {
   showDeath: (card: DeathCard | null) => void;
   showPulloff: (show: boolean, m: MeterState, inv: Inventory) => void;
   showHowTo: (show: boolean) => void;
+  showTip: (text: string | null, urgent?: boolean) => void;
   onStart: (() => void) | null;
   onRestart: (() => void) | null;
   onConsume: ((item: "beer" | "liquor" | "coffee") => void) | null;
@@ -25,11 +26,12 @@ export function createHUD(parent: HTMLElement): HUD {
       <p class="tagline">Stay drunk enough to function.<br/>Sober enough to drive.<br/>Employed enough to eat.</p>
       <button type="button" id="btn-start" class="cta">Start haul</button>
       <button type="button" id="btn-howto" class="ghost">How to play</button>
-      <p class="hint">A / D or ← → steer · W / S throttle · 1 beer · 2 liquor · 3 coffee · P pull-off</p>
+      <p class="hint">A / D steer · cruise is automatic · 1 beer · 2 liquor · 3 coffee · P pull-off</p>
     </div>
     <div id="howto" class="panel hidden">
       <h2>How to play</h2>
       <ul>
+        <li>The rig cruises on its own — steer with A/D. Sip (1) when BAC drops.</li>
         <li>Your BAC drains in real time. Too sober → withdrawal → death.</li>
         <li>Too drunk → blackout. Stay in the pocket between floor and ceiling.</li>
         <li>Alertness falls with miles and night. Micro-sleeps crash the rig.</li>
@@ -46,6 +48,7 @@ export function createHUD(parent: HTMLElement): HUD {
       <div id="inv">🍺 <b id="inv-beer">0</b> · 🥃 <b id="inv-liquor">0</b> · ☕ <b id="inv-coffee">0</b> · $<b id="inv-cash">0</b></div>
       <div id="speed">0 mph · lag <span id="lag">0.00</span></div>
     </div>
+    <div id="play-tip" class="hidden"></div>
     <div id="death-card" class="panel hidden">
       <div class="death-headline" id="death-headline"></div>
       <div class="death-sub" id="death-sub"></div>
@@ -121,6 +124,18 @@ export function createHUD(parent: HTMLElement): HUD {
     },
     showHowTo(show) {
       root.querySelector("#howto")?.classList.toggle("hidden", !show);
+    },
+    showTip(text, urgent = false) {
+      const el = root.querySelector("#play-tip") as HTMLElement | null;
+      if (!el) return;
+      if (!text) {
+        el.classList.add("hidden");
+        el.classList.remove("urgent");
+        return;
+      }
+      el.textContent = text;
+      el.classList.remove("hidden");
+      el.classList.toggle("urgent", urgent);
     },
   };
 

@@ -29,7 +29,7 @@ npm test
 | Key | Action |
 |---|---|
 | A / D or ← → | Steer |
-| W / S or ↑ ↓ | Throttle / brake |
+| W / S or ↑ ↓ | Boost / brake (cruise is automatic) |
 | 1 | Beer |
 | 2 | Liquor |
 | 3 | Coffee |

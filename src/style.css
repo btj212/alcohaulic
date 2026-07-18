@@ -255,28 +255,71 @@ body {
   inset: 0;
   background: radial-gradient(
     ellipse at center,
-    transparent 35%,
-    rgba(5, 6, 10, calc(0.35 + var(--dv, 0) * 0.45)) 100%
+    transparent 42%,
+    rgba(5, 6, 10, calc(0.18 + var(--dv, 0) * 0.28)) 100%
   );
 }
 
 #drunk-overlay .chromatic {
   position: absolute;
   inset: 0;
-  box-shadow: inset calc(var(--dv, 0) * 6px) 0 20px rgba(255, 0, 80, 0.15),
-    inset calc(var(--dv, 0) * -6px) 0 20px rgba(0, 200, 255, 0.12);
+  box-shadow: inset calc(var(--dv, 0) * 8px) 0 24px rgba(255, 40, 80, 0.22),
+    inset calc(var(--dv, 0) * -8px) 0 24px rgba(0, 200, 255, 0.18);
+  backdrop-filter: contrast(calc(1 + var(--dv, 0) * 0.15));
 }
 
 #drunk-overlay .wobble {
   position: absolute;
-  inset: -2%;
+  inset: -3%;
   background: transparent;
-  filter: blur(calc(var(--dv, 0) * 1.2px));
+  filter: blur(calc(var(--dv, 0) * 1.8px));
+  transform: skewX(calc(var(--dv, 0) * 0.6deg));
+}
+
+#drunk-overlay.withdrawal .vignette {
+  background: radial-gradient(
+    ellipse at center,
+    transparent 30%,
+    rgba(40, 10, 10, calc(0.25 + var(--tremor, 0) * 0.35)) 100%
+  );
 }
 
 #drunk-overlay.microsleep {
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(0, 0, 0, 0.4);
   opacity: 1;
+}
+
+#play-tip {
+  position: fixed;
+  bottom: 1.4rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 14;
+  max-width: min(34rem, 92vw);
+  padding: 0.7rem 1.1rem;
+  background: rgba(10, 12, 18, 0.82);
+  border: 1px solid rgba(196, 90, 50, 0.45);
+  color: var(--ink);
+  font-size: 0.8rem;
+  letter-spacing: 0.03em;
+  text-align: center;
+  pointer-events: none;
+}
+
+#play-tip.urgent {
+  border-color: var(--rust);
+  color: #f0c8b0;
+  animation: tip-pulse 0.9s ease-in-out infinite;
+}
+
+@keyframes tip-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.72;
+  }
 }
 
 #ghost-double {
