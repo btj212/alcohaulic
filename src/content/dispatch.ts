@@ -1,37 +1,80 @@
-/** Dark comedy dispatch + radio lines. Tone checkpoint material. */
+/** The cast. Dark comedy, real loneliness underneath. Tone checkpoint material. */
 
-/** First-haul tutorial — plays in order before generic chatter. */
-export const STORY_LINES: string[] = [
-  "Dispatch: Load 447. Reno by dawn. Stay in the pocket — too sober kills you, too drunk kills the load.",
-  "Dispatch: Cooler’s stocked for Lucy’s. That’s five minutes if you sip, not chug.",
-  "CB: BAC drains while you drive. Tap 1 for beer when the bar slides left of the notch.",
-  "Radio ad: Lucky Lucy’s — pink neon, cold cans, no questions. Next exit that isn’t a church.",
-  "Dispatch: Coffee (3) wires you bright. Liquor (2) floats the wheel. Learn which devil you need.",
-  "CB: If the road swims, you overdid it. If your hands shake, you underdid it.",
+import type { Speaker } from "../systems/voice";
+
+export interface StoryBeat {
+  speaker: Speaker;
+  name: string;
+  text: string;
+}
+
+/**
+ * Opening act — plays in order on haul 1. Sets pace, stakes, and one
+ * hook you can't ignore: don't open the trailer.
+ */
+export const STORY_BEATS: StoryBeat[] = [
+  {
+    speaker: "marlene",
+    name: "MARLENE — dispatch",
+    text: "Earl, it's Marlene. Load 447, Reno by dawn. Manifest says medical supplies. Do me a favor — don't open the trailer.",
+  },
+  {
+    speaker: "earl",
+    name: "EARL — you",
+    text: "Twenty-two years on this road. Never missed a sunrise. Never seen one sober, neither.",
+  },
+  {
+    speaker: "marlene",
+    name: "MARLENE — dispatch",
+    text: "Last driver who missed Reno is bagging groceries in Elko. Weather says fog. I say drive.",
+  },
+  {
+    speaker: "preacher",
+    name: "PREACHER — CB, channel 19",
+    text: "Big Bird, this is Preacher. Deer are moving tonight. The real ones don't flicker. You'll learn the difference.",
+  },
+  {
+    speaker: "earl",
+    name: "EARL — you",
+    text: "Hands steady at point-three. Shaky at point-one. Doctor called it a problem. I call it a dosage.",
+  },
+  {
+    speaker: "lucy",
+    name: "LUCY — Lucky Lucy's",
+    text: "First exit past the ridge, sugar. Cold cans, warm lights, no questions. Your cooler won't make Reno and you know it.",
+  },
 ];
 
+/** Ambient chatter after the opening act. Prefix shows in the ticker. */
 export const DISPATCH_LINES: string[] = [
-  "Dispatch: You're burning daylight you don't have. Move.",
-  "CB: Slow-roller ahead in your lane. Pass clean or eat the trailer.",
-  "Dispatch: Cargo sensor says you hit something. Sensor better be drunk too.",
-  "CB: Deer are moving tonight. The real ones don't flicker.",
-  "Dispatch: Cargo's fragile. Unlike your liver.",
-  "CB: Anybody copy? Got a ghost deer on 80 westbound. Again.",
-  "Radio ad: Stay awake with Gas-N-Go Beans — legally a beverage.",
-  "Dispatch: Mile marker check. Prefer you sober-adjacent, not saintly.",
-  "CB: Lot lizard two exits up says she knows a guy. She always does.",
-  "Dispatch: Late means fired. Fired means walking. Walking means sober. Don't.",
-  "Radio: Weather overnight — fog thick as bad decisions.",
-  "Dispatch: Weigh station's closed. God's drunk too.",
-  "CB: If you're hearing angels, that's withdrawal. Pull over or push through.",
-  "Dispatch: Good job on the last haul. Don't ruin it by getting healthy.",
+  "Marlene: You're burning dark you don't have, Earl. Roll.",
+  "Preacher: Slow-roller ahead of you. Pass wide, pass sober-ish.",
+  "Marlene: Trailer sensor pinged. If you hit something, I don't want to know what.",
+  "Preacher: Saw your trailer wobble from a mile back. Sip or sleep, brother.",
+  "Radio ad: Gas-N-Go Beans! Legally a beverage. Practically a friend.",
+  "Marlene: Weigh station's dark. God looked away. Keep it that way.",
+  "Preacher: Channel 19 says Lucy's got a new neon. Some men find religion. You found an exit ramp.",
+  "Radio: Fog overnight. Thick as bad decisions, thin as excuses.",
+  "Marlene: You want the Fresno run next week? Deliver this one with the doors SHUT.",
+  "Preacher: If you're hearing angels, that's withdrawal. Pull over or push through, but pick one.",
+  "Radio ad: Lucky Lucy's — the only lights on for sixty miles. Tell 'em the road sent you.",
+  "Marlene: Don't get healthy on me now, Earl. Healthy men ask questions.",
 ];
 
 export const PULLOFF_LINES: string[] = [
-  "Sodium lights. Hum of a dying ice machine. Home, for an hour.",
-  "Clerk doesn't look up. You don't either.",
-  "Somebody's praying in the lot. You buy beer.",
+  "Sodium lights. A dying ice machine. Home, for an hour.",
+  "The clerk doesn't look up. You don't either. Commerce.",
+  "Somebody's praying in the lot. You buy beer. Same instinct.",
 ];
+
+/** Earl's under-the-breath reactions — fed to the voice, not the ticker. */
+export const EARL_REACTIONS = {
+  sip: ["Hair of the dog.", "There she is.", "Medicine."],
+  liquor: ["Whoa. Floor moved.", "That one had opinions."],
+  pills: ["Heart says no. Schedule says yes.", "Eyes wide open now."],
+  hit: ["Aw, hell.", "That's coming out of my check.", "Sorry, darlin'. Talking to the truck."],
+  shaking: ["Hands. C'mon. Not now.", "Gettin' thin, gettin' thin..."],
+};
 
 export function pickLine(lines: string[], index: number): string {
   return lines[index % lines.length] ?? lines[0]!;

@@ -35,26 +35,42 @@ import { createDeer, updateDeer } from "../systems/deer";
 import { createRadio, unmuteRadio, updateRadio } from "../systems/radio";
 import {
   createCabAudio,
+  playHorn,
   playPayout,
   playScreech,
   playSipSound,
   playThud,
+  playWhoosh,
   startCabAudio,
   updateCabAudio,
 } from "../systems/cabAudio";
 import { createStripClub, updateStripClub } from "../systems/stripClub";
 import { createTraffic, resetTraffic, updateTraffic } from "../systems/traffic";
+import { createVoice, speak, stopVoice } from "../systems/voice";
 import { createSky, updateSky } from "../render/sky";
 import { createTruckMesh, syncTruckMesh } from "../render/truck";
 import { createHUD, setHudSpeed } from "../ui/hud";
 import { createCabPortrait } from "../ui/cabPortrait";
 import { deathCardFor } from "../content/deathCopy";
-import { PULLOFF_LINES, STORY_LINES, pickLine } from "../content/dispatch";
+import {
+  DISPATCH_LINES,
+  EARL_REACTIONS,
+  PULLOFF_LINES,
+  STORY_BEATS,
+  pickLine,
+} from "../content/dispatch";
 
 type Phase = "title" | "playing" | "pulloff" | "dead" | "won";
 
 const HAUL_QUOTA = 12;
-const PRICES: Record<Consumable, number> = { beer: 4, liquor: 12, coffee: 3 };
+const PRICES: Record<Consumable, number> = { beer: 4, liquor: 12, pills: 10 };
+
+/** Traditional tutorial cards shown at the top of haul 1. */
+const TUTORIAL_CARDS: { text: string; dur: number }[] = [
+  { text: "◀ A · D ▶  —  HOLD YOUR LANE", dur: 3.2 },
+  { text: "1 🍺 BEER · 2 🥃 LIQUOR · 3 💊 PILLS", dur: 3.2 },
+  { text: "BAC BAR: STAY BETWEEN THE NOTCHES — THAT'S THE POCKET", dur: 3.6 },
+];
 
 export class Game {
   private renderer: THREE.WebGLRenderer;
@@ -79,6 +95,7 @@ export class Game {
   private vision = createDrunkVision(document.body);
   private radio = createRadio(document.body);
   private cabAudio = createCabAudio();
+  private voice = createVoice();
   private lookNudge = { x: 0, y: 0 };
   private microSleep = false;
   private microTimer = 0;
@@ -93,6 +110,10 @@ export class Game {
   private atStripClub = false;
   private haul = 1;
   private swayKick = 0;
+  private tutIndex = 0;
+  private tutTimer = 0;
+  private storyCardTimer = 0;
+  private ambientIndex = 0;
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({
@@ -159,13 +180,14 @@ export class Game {
       startCabAudio(this.cabAudio);
       this.resetRun();
       this.phase = "playing";
-      this.tipTimer = 7;
-      this.storyTimer = 1.5;
+      this.storyTimer = 12; // story starts after the tutorial cards
       this.storyIndex = 0;
+      this.tutIndex = 0;
+      this.tutTimer = TUTORIAL_CARDS[0]!.dur;
       this.hud.showTitle(false);
       this.hud.showDeath(null);
       this.portrait.root.classList.remove("hidden");
-      this.hud.showTip("Cruise is on. A/D or mouse to steer · 1 beer when the pocket dips");
+      this.hud.showTip(TUTORIAL_CARDS[0]!.text);
     };
     this.hud.onRestart = () => {
       if (this.phase === "won") {
@@ -174,10 +196,12 @@ export class Game {
       }
       this.hud.showDeath(null);
       this.hud.showTip(null);
+      this.hud.showStoryCard(null);
       this.hud.showTitle(true);
       this.portrait.root.classList.add("hidden");
       this.phase = "title";
       this.atStripClub = false;
+      stopVoice(this.voice);
     };
     this.hud.onPulloffAction = (action) => {
       if (action.startsWith("buy:")) {
@@ -222,16 +246,16 @@ export class Game {
       if (this.phase !== "playing") return;
       if (e.code === "Digit1") this.consume("beer");
       if (e.code === "Digit2") this.consume("liquor");
-      if (e.code === "Digit3") this.consume("coffee");
+      if (e.code === "Digit3") this.consume("pills");
       if (e.code === "KeyP") this.openPulloff(false);
     });
     window.addEventListener("keyup", (e) => this.keys.delete(e.code));
 
     window.addEventListener("mousemove", (e) => {
       if (this.phase !== "playing") return;
-      // Mouse X → subtle steer; center of screen = straight
+      // Mouse right of center steers screen-right (world -X, cam faces +Z)
       const nx = (e.clientX / window.innerWidth) * 2 - 1;
-      this.mouseSteer = Math.max(-1, Math.min(1, nx * 0.85));
+      this.mouseSteer = Math.max(-1, Math.min(1, -nx * 0.85));
       this.mouseActive = true;
     });
     window.addEventListener("mouseleave", () => {
@@ -251,12 +275,16 @@ export class Game {
       this.inventory = inventory;
       playSipSound(this.cabAudio);
       this.portrait.playConsume(item);
-      if (item === "coffee") {
-        this.hud.showTip("Gas-station lightning. Hands buzz. Eyes too open.");
+      if (item === "pills") {
+        this.hud.showTip("Bootleg uppers. Eyes pried open. Heart files a complaint.");
         this.tipTimer = 2.5;
+        speak(this.voice, "earl", pickLine(EARL_REACTIONS.pills, Math.floor(Math.random() * 9)));
       } else if (item === "liquor") {
         this.hud.showTip("The wheel gets farther away.");
         this.tipTimer = 2.2;
+        speak(this.voice, "earl", pickLine(EARL_REACTIONS.liquor, Math.floor(Math.random() * 9)));
+      } else if (Math.random() < 0.4) {
+        speak(this.voice, "earl", pickLine(EARL_REACTIONS.sip, Math.floor(Math.random() * 9)));
       }
     }
   }
@@ -283,7 +311,10 @@ export class Game {
     this.night = 1;
     this.haul = 1;
     this.swayKick = 0;
-    this.stripClub.group.position.z = 7200;
+    this.tutIndex = 0;
+    this.storyCardTimer = 0;
+    this.ambientIndex = 0;
+    this.stripClub.group.position.set(-14, 0, 7200);
     this.stripClub.approached = false;
     this.stripClub.offered = false;
     this.atStripClub = false;
@@ -415,8 +446,9 @@ export class Game {
   private tickPlay(dt: number, t: number): void {
     let steer = 0;
     let throttle = 0;
-    if (this.keys.has("KeyA") || this.keys.has("ArrowLeft")) steer -= 1;
-    if (this.keys.has("KeyD") || this.keys.has("ArrowRight")) steer += 1;
+    // Chase cam faces +Z, so screen-right is world -X: A (left) = +steer.
+    if (this.keys.has("KeyA") || this.keys.has("ArrowLeft")) steer += 1;
+    if (this.keys.has("KeyD") || this.keys.has("ArrowRight")) steer -= 1;
     if (this.keys.has("KeyW") || this.keys.has("ArrowUp")) throttle += 1;
     if (this.keys.has("KeyS") || this.keys.has("ArrowDown")) throttle -= 1;
 
@@ -467,6 +499,16 @@ export class Game {
         this.die("wreck");
         return;
       }
+      if (hit.kind === "whoosh") {
+        playWhoosh(this.cabAudio);
+        continue;
+      }
+      if (hit.kind === "horn") {
+        playHorn(this.cabAudio);
+        this.hud.showTip("YOU'RE IN THEIR LANE", true);
+        this.tipTimer = 1.6;
+        continue;
+      }
       if (hit.kind === "glance") {
         this.meters = applyRoadHit(this.meters, "glance");
         playScreech(this.cabAudio);
@@ -487,6 +529,7 @@ export class Game {
         this.hud.showTip("That deer was real. The grille disagrees.", true);
         this.tipTimer = 2.5;
       }
+      speak(this.voice, "earl", pickLine(EARL_REACTIONS.hit, Math.floor(Math.random() * 9)));
       if (this.meters.cargoIntegrity <= 0) {
         this.die("fired");
         return;
@@ -500,9 +543,10 @@ export class Game {
     }
     if (club.shouldOffer) {
       this.radio.el.textContent =
-        "Dispatch: Exit coming. Restock or you're walking. Lucy's lights are on.";
+        "Lucy: There he is. Kill the engine, sugar — the neon's warm and the cans are cold.";
       this.radio.el.classList.add("show");
       window.setTimeout(() => this.radio.el.classList.remove("show"), 6000);
+      speak(this.voice, "lucy", "There he is. Kill the engine, sugar. The neon's warm and the cans are cold.");
       this.openPulloff(true);
       return;
     }
@@ -549,38 +593,80 @@ export class Game {
     );
     updateCabAudio(this.cabAudio, { speedMph: mph, withdrawal, dt });
 
-    // Story radio for the first leg
-    this.storyTimer -= dt;
-    if (this.storyTimer <= 0 && this.storyIndex < STORY_LINES.length) {
-      this.radio.el.textContent = STORY_LINES[this.storyIndex]!;
-      this.radio.el.classList.add("show");
-      this.storyIndex += 1;
-      this.storyTimer = 14 + Math.random() * 6;
-      window.setTimeout(() => this.radio.el.classList.remove("show"), 6500);
-    } else {
-      updateRadio(this.radio, dt, this.storyIndex >= STORY_LINES.length);
+    // Tutorial cards first, then the opening act, then ambient chatter
+    if (this.tutIndex < TUTORIAL_CARDS.length && this.haul === 1) {
+      this.tutTimer -= dt;
+      if (this.tutTimer <= 0) {
+        this.tutIndex += 1;
+        const next = TUTORIAL_CARDS[this.tutIndex];
+        if (next) {
+          this.hud.showTip(next.text);
+          this.tutTimer = next.dur;
+        } else {
+          this.hud.showTip(null);
+        }
+      }
     }
+
+    this.storyCardTimer -= dt;
+    if (this.storyCardTimer <= 0) this.hud.showStoryCard(null);
+
+    this.storyTimer -= dt;
+    if (
+      this.storyTimer <= 0 &&
+      this.haul === 1 &&
+      this.storyIndex < STORY_BEATS.length
+    ) {
+      const beat = STORY_BEATS[this.storyIndex]!;
+      this.hud.showStoryCard(beat.name, beat.text);
+      this.storyCardTimer = 7;
+      speak(this.voice, beat.speaker, beat.text);
+      this.storyIndex += 1;
+      this.storyTimer = 15 + Math.random() * 5;
+    } else if (
+      this.storyTimer <= 0 &&
+      (this.haul > 1 || this.storyIndex >= STORY_BEATS.length)
+    ) {
+      const line = pickLine(DISPATCH_LINES, this.ambientIndex++);
+      this.radio.el.textContent = line;
+      this.radio.el.classList.add("show");
+      window.setTimeout(() => this.radio.el.classList.remove("show"), 6000);
+      const speakerName = line.split(":")[0]?.toLowerCase() ?? "";
+      if (speakerName === "marlene") speak(this.voice, "marlene", line.slice(line.indexOf(":") + 1));
+      else if (speakerName === "preacher") speak(this.voice, "preacher", line.slice(line.indexOf(":") + 1));
+      this.storyTimer = 16 + Math.random() * 8;
+    }
+    updateRadio(this.radio, dt, false);
 
     this.hud.setPlaying(this.meters, this.inventory, HAUL_QUOTA, lag);
     setHudSpeed(this.hud, mph, this.meters.miles, lag, this.haul);
     this.portrait.setState(this.meters, this.inventory);
 
+    const tutorialActive =
+      this.haul === 1 && this.tutIndex < TUTORIAL_CARDS.length;
     if (this.tipTimer > 0) {
       this.tipTimer -= dt;
-      if (this.tipTimer <= 0) this.hud.showTip(null);
-    } else if (needsSip(this.meters)) {
-      const urgent = this.meters.bac < this.meters.floor;
-      this.hud.showTip(
-        urgent
-          ? "HANDS SHAKING — 1 beer or 2 liquor"
-          : "BAC dropping — press 1 to sip",
-        urgent,
-      );
-    } else if (
-      this.inventory.beer + this.inventory.liquor <= 2 &&
-      this.meters.miles < STRIP_CLUB_MILES
-    ) {
-      this.hud.showTip("Cooler’s light. Make it to Lucy’s.");
+      if (this.tipTimer <= 0 && !tutorialActive) this.hud.showTip(null);
+    } else if (!tutorialActive) {
+      if (needsSip(this.meters)) {
+        const urgent = this.meters.bac < this.meters.floor;
+        this.hud.showTip(
+          urgent
+            ? "HANDS SHAKING — 1 beer or 2 liquor"
+            : "BAC dropping — press 1 to sip",
+          urgent,
+        );
+        if (urgent && Math.random() < 0.008) {
+          speak(this.voice, "earl", pickLine(EARL_REACTIONS.shaking, Math.floor(Math.random() * 9)));
+        }
+      } else if (
+        this.inventory.beer + this.inventory.liquor <= 2 &&
+        this.meters.miles < STRIP_CLUB_MILES
+      ) {
+        this.hud.showTip("Cooler’s light. Make it to Lucy’s.");
+      } else {
+        this.hud.showTip(null);
+      }
     }
 
     if (isCrashing(this.truck, this.highway.laneHalfWidth)) {

@@ -156,6 +156,58 @@ function playCough(audio: CabAudio, intensity: number): void {
   click.stop(t0 + 0.12);
 }
 
+/** Doppler-ish pass-by whoosh for traffic. */
+export function playWhoosh(audio: CabAudio): void {
+  const ctx = audio.ctx;
+  if (!ctx) return;
+  const t0 = ctx.currentTime;
+  const dur = 0.9;
+  const noise = ctx.createBufferSource();
+  const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * dur), ctx.sampleRate);
+  const ch = buf.getChannelData(0);
+  for (let i = 0; i < ch.length; i++) {
+    const env = Math.sin((i / ch.length) * Math.PI);
+    ch[i] = (Math.random() * 2 - 1) * env * env;
+  }
+  noise.buffer = buf;
+  const filter = ctx.createBiquadFilter();
+  filter.type = "bandpass";
+  filter.frequency.setValueAtTime(1400, t0);
+  filter.frequency.exponentialRampToValueAtTime(320, t0 + dur);
+  filter.Q.value = 0.8;
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.16, t0);
+  gain.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+  noise.connect(filter);
+  filter.connect(gain);
+  gain.connect(ctx.destination);
+  noise.start(t0);
+  noise.stop(t0 + dur);
+}
+
+/** Angry oncoming horn — you drifted. */
+export function playHorn(audio: CabAudio): void {
+  const ctx = audio.ctx;
+  if (!ctx) return;
+  const t0 = ctx.currentTime;
+  const dur = 0.7;
+  for (const freq of [311, 370]) {
+    const osc = ctx.createOscillator();
+    osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(freq * 1.06, t0);
+    osc.frequency.exponentialRampToValueAtTime(freq * 0.92, t0 + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(0.09, t0 + 0.03);
+    g.gain.setValueAtTime(0.09, t0 + dur * 0.7);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+    osc.connect(g);
+    g.connect(ctx.destination);
+    osc.start(t0);
+    osc.stop(t0 + dur + 0.05);
+  }
+}
+
 /** Metal-on-metal scrape for a glancing hit. */
 export function playScreech(audio: CabAudio): void {
   const ctx = audio.ctx;

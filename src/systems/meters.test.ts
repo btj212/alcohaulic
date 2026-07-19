@@ -58,11 +58,12 @@ describe("meters — pocket inversion", () => {
     expect(drunkSwayFromBac(meters)).toBeGreaterThan(drunkSwayFromBac(pocket));
   });
 
-  it("coffee wires you and lifts alertness", () => {
+  it("pills wire you and lift alertness without sobering", () => {
     const before = { ...DEFAULT_METERS, alertness: 0.4, wired: 0 };
-    const { meters } = applyConsumable(before, { ...DEFAULT_INVENTORY }, "coffee");
+    const { meters } = applyConsumable(before, { ...DEFAULT_INVENTORY }, "pills");
     expect(meters.alertness).toBeGreaterThan(before.alertness);
     expect(meters.wired).toBeGreaterThan(0.5);
+    expect(meters.bac).toBe(before.bac);
   });
 
   it("steering lag worsens below floor and near ceiling", () => {

@@ -12,7 +12,8 @@ export interface StripClub {
 
 export function createStripClub(): StripClub {
   const group = new THREE.Group();
-  group.position.set(14, 0, STRIP_CLUB_DISTANCE);
+  // Screen-right of the road (chase cam faces +Z, so right = -X)
+  group.position.set(-14, 0, STRIP_CLUB_DISTANCE);
 
   const lot = new THREE.Mesh(
     new THREE.PlaneGeometry(22, 28),

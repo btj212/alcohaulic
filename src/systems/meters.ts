@@ -28,7 +28,7 @@ export interface MeterState {
 export interface Inventory {
   beer: number;
   liquor: number;
-  coffee: number;
+  pills: number;
 }
 
 /** ~5 min to first strip club at cruise with a sip rhythm. */
@@ -49,7 +49,7 @@ export const DEFAULT_METERS: MeterState = {
 export const DEFAULT_INVENTORY: Inventory = {
   beer: 12,
   liquor: 3,
-  coffee: 4,
+  pills: 4,
 };
 
 /** First story stop — ~5 minutes at highway cruise. */
@@ -163,7 +163,7 @@ export function needsSip(m: MeterState): boolean {
   return m.bac < m.floor + 0.07;
 }
 
-export type Consumable = "beer" | "liquor" | "coffee";
+export type Consumable = "beer" | "liquor" | "pills";
 
 export function applyConsumable(
   m: MeterState,
@@ -193,9 +193,9 @@ export function applyConsumable(
       meters.pocketCenter + 0.008,
     );
   } else {
-    meters.alertness = clamp01(meters.alertness + 0.28);
-    meters.bac = Math.max(0, meters.bac - 0.025);
-    meters.wired = clamp01(meters.wired + 0.7);
+    // Bootleg uppers — big alertness spike, hard wire, no sobering effect
+    meters.alertness = clamp01(meters.alertness + 0.38);
+    meters.wired = clamp01(meters.wired + 0.9);
   }
 
   return { meters, inventory, ok: true };
@@ -239,8 +239,9 @@ export function applyJobProgress(
   return { ...m, jobStanding: job, cargoIntegrity: cargo };
 }
 
+/** Run ends only when the load itself is destroyed — no abstract job bar. */
 export function checkFired(m: MeterState): boolean {
-  return m.jobStanding <= 0.05 || m.cargoIntegrity <= 0;
+  return m.cargoIntegrity <= 0;
 }
 
 export function quotaProgress(miles: number, quota: number): number {

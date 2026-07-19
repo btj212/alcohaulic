@@ -1,9 +1,9 @@
 import * as THREE from "three";
 
 /**
- * Road hazards: slow cars in your lane, oncoming headlights, tire debris,
- * and real deer crossings. Hits bill the player (cargo/job), never bystanders —
- * a head-on is YOUR wreck.
+ * Road hazards that move like real traffic. Chase cam faces +Z, so
+ * SCREEN-RIGHT = -X: your lane lives at negative X, oncoming at positive X.
+ * Hits bill the player (cargo), never bystanders — a head-on is YOUR wreck.
  */
 
 export type HazardKind = "slow" | "oncoming" | "debris" | "deer";
@@ -18,6 +18,8 @@ export interface Hazard {
   /** m/s lateral (deer walk across the road). */
   vx: number;
   alive: boolean;
+  /** Whoosh/horn played for this hazard already. */
+  passed: boolean;
 }
 
 export interface TrafficSystem {
@@ -28,89 +30,118 @@ export interface TrafficSystem {
 }
 
 export interface TrafficEvent {
-  kind: "wreck" | "glance" | "debris" | "deer";
+  kind: "wreck" | "glance" | "debris" | "deer" | "whoosh" | "horn";
 }
 
-const CAR_COLORS = [0x8a3a2a, 0x2a4a6a, 0x555a44, 0x6a5a2a, 0x4a2a5a];
+const CAR_COLORS = [0x8a3a2a, 0x2a4a6a, 0x555a44, 0x6a5a2a, 0x4a2a5a, 0x3a3a42];
 
 export function createTraffic(): TrafficSystem {
   return {
     group: new THREE.Group(),
     hazards: [],
-    spawnTimer: 6,
-    deerTimer: 40,
+    spawnTimer: 5,
+    deerTimer: 45,
   };
 }
 
-function makeCar(kind: "slow" | "oncoming", seedColor: number): THREE.Group {
+function makeCar(kind: "slow" | "oncoming", color: number): THREE.Group {
   const g = new THREE.Group();
-  const body = new THREE.Mesh(
-    new THREE.BoxGeometry(1.9, 1.3, 4.4),
-    new THREE.MeshStandardMaterial({
-      color: seedColor,
-      roughness: 0.6,
-      metalness: 0.2,
-      flatShading: true,
-    }),
-  );
-  body.position.y = 0.85;
-  g.add(body);
+  const isSemi = Math.random() < 0.25;
 
-  const cabin = new THREE.Mesh(
-    new THREE.BoxGeometry(1.7, 0.8, 2.0),
-    new THREE.MeshStandardMaterial({
-      color: 0x1a2028,
-      roughness: 0.4,
-      flatShading: true,
-    }),
-  );
-  cabin.position.set(0, 1.7, -0.3);
-  g.add(cabin);
+  if (isSemi) {
+    const cab = new THREE.Mesh(
+      new THREE.BoxGeometry(2.3, 2.4, 2.6),
+      new THREE.MeshStandardMaterial({ color, roughness: 0.6, flatShading: true }),
+    );
+    cab.position.set(0, 1.6, kind === "oncoming" ? -3.2 : 3.2);
+    g.add(cab);
+    const box = new THREE.Mesh(
+      new THREE.BoxGeometry(2.5, 2.9, 8),
+      new THREE.MeshStandardMaterial({ color: 0x3a3a44, roughness: 0.85, flatShading: true }),
+    );
+    box.position.set(0, 1.9, kind === "oncoming" ? 2 : -2);
+    g.add(box);
+  } else {
+    const isPickup = Math.random() < 0.4;
+    const body = new THREE.Mesh(
+      new THREE.BoxGeometry(1.9, 1.1, 4.4),
+      new THREE.MeshStandardMaterial({ color, roughness: 0.6, metalness: 0.2, flatShading: true }),
+    );
+    body.position.y = 0.75;
+    g.add(body);
+    const cabin = new THREE.Mesh(
+      new THREE.BoxGeometry(1.7, 0.75, isPickup ? 1.3 : 2.0),
+      new THREE.MeshStandardMaterial({ color: 0x1a2028, roughness: 0.4, flatShading: true }),
+    );
+    cabin.position.set(0, 1.55, isPickup ? 0.6 : -0.3);
+    g.add(cabin);
+    if (isPickup) {
+      const bed = new THREE.Mesh(
+        new THREE.BoxGeometry(1.8, 0.5, 1.6),
+        new THREE.MeshStandardMaterial({ color: 0x14181e, roughness: 0.9, flatShading: true }),
+      );
+      bed.position.set(0, 1.05, -1.3);
+      g.add(bed);
+    }
+  }
 
+  const frontZ = kind === "oncoming" ? -2.3 : 2.3;
   if (kind === "oncoming") {
-    // Headlights facing the player
     for (const side of [-1, 1]) {
       const lens = new THREE.Mesh(
-        new THREE.BoxGeometry(0.3, 0.2, 0.08),
+        new THREE.BoxGeometry(0.32, 0.2, 0.08),
         new THREE.MeshBasicMaterial({ color: 0xfff4cc }),
       );
-      lens.position.set(side * 0.65, 0.8, -2.25);
+      lens.position.set(side * 0.65, 0.8, frontZ);
       g.add(lens);
     }
-    const glow = new THREE.PointLight(0xfff0c0, 6, 30, 1.8);
-    glow.position.set(0, 0.9, -3);
+    const glow = new THREE.PointLight(0xfff0c0, 8, 36, 1.7);
+    glow.position.set(0, 0.9, frontZ - 1);
     g.add(glow);
-  } else {
-    for (const side of [-1, 1]) {
-      const tail = new THREE.Mesh(
-        new THREE.BoxGeometry(0.3, 0.18, 0.08),
-        new THREE.MeshBasicMaterial({ color: 0xff3322 }),
-      );
-      tail.position.set(side * 0.65, 0.85, -2.25);
-      g.add(tail);
-    }
-    const glow = new THREE.PointLight(0xff4422, 1.2, 12, 2);
-    glow.position.set(0, 0.9, -2.6);
+  }
+  // Everyone gets taillights — nothing invisible on this road
+  for (const side of [-1, 1]) {
+    const tail = new THREE.Mesh(
+      new THREE.BoxGeometry(0.3, 0.18, 0.08),
+      new THREE.MeshBasicMaterial({ color: 0xff3322 }),
+    );
+    tail.position.set(side * 0.65, 0.85, kind === "oncoming" ? 2.3 : -2.3);
+    g.add(tail);
+  }
+  if (kind === "slow") {
+    const glow = new THREE.PointLight(0xff4422, 2.2, 16, 2);
+    glow.position.set(0, 0.9, -2.8);
     g.add(glow);
   }
   return g;
 }
 
+/** Blown tire + cones — lit so you can actually see it. */
 function makeDebris(): THREE.Group {
   const g = new THREE.Group();
-  const chunk = new THREE.Mesh(
-    new THREE.BoxGeometry(1.1, 0.35, 0.8),
-    new THREE.MeshStandardMaterial({ color: 0x151518, roughness: 1, flatShading: true }),
+  const tire = new THREE.Mesh(
+    new THREE.TorusGeometry(0.45, 0.18, 6, 10),
+    new THREE.MeshStandardMaterial({ color: 0x18181c, roughness: 1, flatShading: true }),
   );
-  chunk.position.y = 0.18;
-  chunk.rotation.y = Math.random() * Math.PI;
-  g.add(chunk);
-  const strip = new THREE.Mesh(
-    new THREE.BoxGeometry(0.5, 0.1, 1.4),
-    new THREE.MeshStandardMaterial({ color: 0x202024, roughness: 1, flatShading: true }),
-  );
-  strip.position.set(0.4, 0.08, 0.3);
-  g.add(strip);
+  tire.rotation.x = Math.PI / 2;
+  tire.position.y = 0.2;
+  g.add(tire);
+  for (const [cx, cz] of [
+    [-0.9, 1.2],
+    [0.8, -0.8],
+  ] as const) {
+    const cone = new THREE.Mesh(
+      new THREE.ConeGeometry(0.28, 0.7, 8),
+      new THREE.MeshStandardMaterial({
+        color: 0xd06020,
+        emissive: 0x702800,
+        emissiveIntensity: 0.8,
+        flatShading: true,
+      }),
+    );
+    cone.position.set(cx, 0.35, cz);
+    g.add(cone);
+  }
   return g;
 }
 
@@ -137,7 +168,6 @@ function makeRealDeer(): THREE.Group {
     leg.position.set(x, 0.35, z);
     g.add(leg);
   }
-  // Eye shine — real ones catch your headlights too
   for (const side of [-1, 1]) {
     const eye = new THREE.Mesh(
       new THREE.SphereGeometry(0.05, 6, 6),
@@ -157,41 +187,45 @@ function spawnHazard(
 ): void {
   const roll = Math.random();
   let hazard: Hazard;
+  const color = CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)]!;
 
-  if (roll < 0.42) {
-    // Slow car ahead in your lane, drifting right of center
-    const mesh = makeCar("slow", CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)]!);
+  if (roll < 0.45) {
+    // Traffic flowing your direction, a bit under your cruise — right lane = -X
+    const mesh = makeCar("slow", color);
     hazard = {
       kind: "slow",
       mesh,
-      x: 1.2 + Math.random() * (laneHalfWidth - 2.6),
-      z: truckZ + 180 + Math.random() * 80,
-      vz: 12 + Math.random() * 4,
+      x: -(0.8 + Math.random() * (laneHalfWidth - 2.6)),
+      z: truckZ + 110 + Math.random() * 70,
+      vz: 17.5 + Math.random() * 3.5, // 39–47 mph, real flow
       vx: 0,
       alive: true,
+      passed: false,
     };
-  } else if (roll < 0.78) {
-    // Oncoming in the left lane
-    const mesh = makeCar("oncoming", CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)]!);
+  } else if (roll < 0.82) {
+    // Oncoming lane = +X (screen left)
+    const mesh = makeCar("oncoming", color);
     mesh.rotation.y = Math.PI;
     hazard = {
       kind: "oncoming",
       mesh,
-      x: -(1.6 + Math.random() * (laneHalfWidth - 3)),
-      z: truckZ + 260 + Math.random() * 120,
-      vz: -(20 + Math.random() * 8 + difficulty * 2),
+      x: 1.8 + Math.random() * (laneHalfWidth - 3),
+      z: truckZ + 300 + Math.random() * 140,
+      vz: -(22 + Math.random() * 7 + difficulty * 1.5),
       vx: 0,
       alive: true,
+      passed: false,
     };
   } else {
     hazard = {
       kind: "debris",
       mesh: makeDebris(),
-      x: (Math.random() * 2 - 1) * (laneHalfWidth - 1.5),
-      z: truckZ + 200 + Math.random() * 100,
+      x: (Math.random() * 2 - 1) * (laneHalfWidth - 1.6),
+      z: truckZ + 220 + Math.random() * 100,
       vz: 0,
       vx: 0,
       alive: true,
+      passed: false,
     };
   }
 
@@ -203,17 +237,18 @@ function spawnHazard(
 function spawnDeerCrossing(sys: TrafficSystem, truckZ: number, laneHalfWidth: number): void {
   const fromLeft = Math.random() > 0.5;
   const mesh = makeRealDeer();
-  const startX = fromLeft ? -(laneHalfWidth + 6) : laneHalfWidth + 6;
+  const startX = fromLeft ? laneHalfWidth + 7 : -(laneHalfWidth + 7);
   const hazard: Hazard = {
     kind: "deer",
     mesh,
     x: startX,
-    z: truckZ + 120 + Math.random() * 60,
+    z: truckZ + 130 + Math.random() * 60,
     vz: 0,
-    vx: (fromLeft ? 1 : -1) * (2.6 + Math.random() * 1.6),
+    vx: (fromLeft ? -1 : 1) * (2.6 + Math.random() * 1.6),
     alive: true,
+    passed: false,
   };
-  mesh.rotation.y = fromLeft ? Math.PI / 2 : -Math.PI / 2;
+  mesh.rotation.y = fromLeft ? -Math.PI / 2 : Math.PI / 2;
   mesh.position.set(hazard.x, 0, hazard.z);
   sys.group.add(mesh);
   sys.hazards.push(hazard);
@@ -227,7 +262,6 @@ export function updateTraffic(
     truckZ: number;
     truckSpeed: number;
     laneHalfWidth: number;
-    /** 1 = first haul; scales spawn rate and speeds. */
     difficulty: number;
   },
 ): TrafficEvent[] {
@@ -237,8 +271,8 @@ export function updateTraffic(
   sys.spawnTimer -= dt;
   if (sys.spawnTimer <= 0) {
     spawnHazard(sys, truckZ, laneHalfWidth, difficulty);
-    const base = 9 - Math.min(4.5, difficulty * 1.5);
-    sys.spawnTimer = base + Math.random() * 5;
+    const base = 7.5 - Math.min(4, difficulty * 1.2);
+    sys.spawnTimer = base + Math.random() * 4;
   }
 
   sys.deerTimer -= dt;
@@ -256,7 +290,6 @@ export function updateTraffic(
     const dz = h.z - truckZ;
     const dx = h.x - truckX;
 
-    // Collision windows (truck half-width ~1.3 + hazard size)
     if (h.kind === "debris") {
       if (Math.abs(dx) < 1.7 && Math.abs(dz) < 2.4) {
         events.push({ kind: "debris" });
@@ -266,8 +299,8 @@ export function updateTraffic(
       if (Math.abs(dx) < 1.9 && Math.abs(dz) < 2.8) {
         events.push({ kind: "deer" });
         h.alive = false;
-      } else if (Math.abs(h.x) > laneHalfWidth + 8) {
-        h.alive = false; // made it across
+      } else if (Math.abs(h.x) > laneHalfWidth + 9) {
+        h.alive = false;
       }
     } else {
       if (Math.abs(dz) < 4.6) {
@@ -280,13 +313,20 @@ export function updateTraffic(
           h.alive = false;
         }
       }
+      // Pass-by audio: oncoming whoosh, or horn if you're drifting into them
+      if (!h.passed && h.kind === "oncoming" && dz < 30 && dz > 0) {
+        h.passed = true;
+        events.push({ kind: Math.abs(dx) < 3.4 ? "horn" : "whoosh" });
+      }
+      if (!h.passed && h.kind === "slow" && dz < 6 && Math.abs(dx) > 2.4) {
+        h.passed = true;
+        events.push({ kind: "whoosh" });
+      }
     }
 
-    // Despawn far behind
-    if (dz < -120 || dz > 600) h.alive = false;
+    if (dz < -140 || dz > 620) h.alive = false;
   }
 
-  // Cull dead hazards
   for (let i = sys.hazards.length - 1; i >= 0; i--) {
     const h = sys.hazards[i]!;
     if (!h.alive) {
@@ -305,8 +345,8 @@ export function resetTraffic(sys: TrafficSystem): void {
     disposeGroup(h.mesh);
   }
   sys.hazards.length = 0;
-  sys.spawnTimer = 6;
-  sys.deerTimer = 40;
+  sys.spawnTimer = 5;
+  sys.deerTimer = 45;
 }
 
 function disposeGroup(g: THREE.Object3D): void {

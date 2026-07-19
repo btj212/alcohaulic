@@ -189,6 +189,58 @@ function makeChunk(seed: number, z0: number): THREE.Group {
     g.add(hill);
   }
 
+  // Rare far-off landmarks: radio mast or water tower
+  const landmarkRoll = rng();
+  if (landmarkRoll > 0.82) {
+    const side = rng() > 0.5 ? 1 : -1;
+    const lx = side * (LANE_HALF + 30 + rng() * 30);
+    const lz = rng() * CHUNK_LEN;
+    if (landmarkRoll > 0.91) {
+      // Radio mast with red beacons
+      const mast = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.15, 0.5, 34, 4),
+        new THREE.MeshStandardMaterial({ color: 0x2a2a32, flatShading: true }),
+      );
+      mast.position.set(lx, 17, lz);
+      g.add(mast);
+      for (const h of [12, 24, 34]) {
+        const beacon = new THREE.Mesh(
+          new THREE.SphereGeometry(0.35, 6, 6),
+          new THREE.MeshBasicMaterial({ color: 0xff2222 }),
+        );
+        beacon.position.set(lx, h, lz);
+        g.add(beacon);
+      }
+    } else {
+      // Rusty water tower
+      const tank = new THREE.Mesh(
+        new THREE.CylinderGeometry(4, 4.4, 5, 8),
+        new THREE.MeshStandardMaterial({ color: 0x4a3a2e, roughness: 0.95, flatShading: true }),
+      );
+      tank.position.set(lx, 14, lz);
+      g.add(tank);
+      const cap = new THREE.Mesh(
+        new THREE.ConeGeometry(4.4, 2.2, 8),
+        new THREE.MeshStandardMaterial({ color: 0x3a2e24, roughness: 1, flatShading: true }),
+      );
+      cap.position.set(lx, 17.6, lz);
+      g.add(cap);
+      for (const [ox, oz] of [
+        [-2.5, -2.5],
+        [2.5, -2.5],
+        [-2.5, 2.5],
+        [2.5, 2.5],
+      ] as const) {
+        const leg = new THREE.Mesh(
+          new THREE.BoxGeometry(0.3, 12, 0.3),
+          new THREE.MeshStandardMaterial({ color: 0x33291f, flatShading: true }),
+        );
+        leg.position.set(lx + ox, 6, lz + oz);
+        g.add(leg);
+      }
+    }
+  }
+
   // Occasional roadside billboard (dark comedy filler)
   if (rng() > 0.62) {
     const side = rng() > 0.5 ? 1 : -1;

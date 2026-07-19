@@ -15,9 +15,10 @@ export interface HUD {
   ) => void;
   showHowTo: (show: boolean) => void;
   showTip: (text: string | null, urgent?: boolean) => void;
+  showStoryCard: (name: string | null, text?: string) => void;
   onStart: (() => void) | null;
   onRestart: (() => void) | null;
-  onConsume: ((item: "beer" | "liquor" | "coffee") => void) | null;
+  onConsume: ((item: "beer" | "liquor" | "pills") => void) | null;
   onPulloffAction: ((action: string) => void) | null;
   onResume: (() => void) | null;
 }
@@ -28,31 +29,49 @@ export function createHUD(parent: HTMLElement): HUD {
   root.innerHTML = `
     <div id="title-screen" class="panel">
       <div class="brand">ALCOHAULIC</div>
-      <p class="tagline">Stay drunk enough to function.<br/>Sober enough to drive.<br/>Employed enough to eat.</p>
+      <div class="title-char">
+        <img src="/earl-face.png" alt="Earl" class="title-face" />
+        <div class="title-bio">
+          <div class="char-name">EARL "SMOKEY" JACKSON</div>
+          <div class="char-sub">22 years over-the-road · 2,317,809 miles · 0 sober sunrises</div>
+          <p class="tagline">Stay drunk enough to function.<br/>Sober enough to drive.<br/>Employed enough to eat.</p>
+        </div>
+      </div>
+      <div class="controls-grid">
+        <span><kbd>A</kbd><kbd>D</kbd> steer</span>
+        <span><kbd>W</kbd><kbd>S</kbd> speed</span>
+        <span><kbd>1</kbd> beer</span>
+        <span><kbd>2</kbd> liquor</span>
+        <span><kbd>3</kbd> pills</span>
+        <span><kbd>P</kbd> pull off</span>
+      </div>
       <button type="button" id="btn-start" class="cta">Start haul</button>
       <button type="button" id="btn-howto" class="ghost">How to play</button>
-      <p class="hint">A / D or mouse steer · cruise on · 1 beer · 2 liquor · 3 coffee · ~5 min to Lucy’s</p>
     </div>
     <div id="howto" class="panel hidden">
       <h2>How to play</h2>
       <ul>
-        <li>The rig cruises on its own — steer with A/D. Sip (1) when BAC drops.</li>
-        <li>Your BAC drains in real time. Too sober → withdrawal → death.</li>
-        <li>Too drunk → blackout. Stay in the pocket between floor and ceiling.</li>
-        <li>Alertness falls with miles and night. Micro-sleeps crash the rig.</li>
-        <li>Pull off (P) to buy supplies or sleep — sleep sobers you toward the floor.</li>
-        <li>Make the mile quota before dawn. Crashes punish you, not bystanders.</li>
+        <li>The rig cruises with traffic — steer with A/D or the mouse.</li>
+        <li>BAC drains as you drive. Too sober → the shakes → seizure.</li>
+        <li>Too drunk → blackout. Live between the notches. That's the pocket.</li>
+        <li>Beer (1) holds the pocket. Liquor (2) is a sledgehammer. Pills (3) force your eyes open.</li>
+        <li>Dodge traffic and deer — every hit bills your cargo, and cargo is money.</li>
+        <li>Deliver loads, bank cash, spend it at Lucy's on restock. The floor only rises.</li>
       </ul>
       <button type="button" id="btn-howto-back" class="cta">Back</button>
     </div>
     <div id="meters" class="hidden">
       <div class="meter"><span>BAC</span><div class="bar"><i id="bar-bac"></i><em id="floor-mark"></em><em id="ceil-mark"></em></div></div>
       <div class="meter"><span>ALERT</span><div class="bar"><i id="bar-alert"></i></div></div>
-      <div class="meter"><span>JOB</span><div class="bar"><i id="bar-job"></i></div></div>
       <div class="meter"><span>CARGO</span><div class="bar"><i id="bar-cargo"></i></div></div>
       <div class="meter"><span>HAUL</span><div class="bar"><i id="bar-haul"></i></div></div>
-      <div id="inv">🍺 <b id="inv-beer">0</b> · 🥃 <b id="inv-liquor">0</b> · ☕ <b id="inv-coffee">0</b> · $<b id="inv-cash">0</b></div>
-      <div id="speed">0 mph · lag <span id="lag">0.00</span></div>
+      <div id="cash-line">$<b id="inv-cash">0</b></div>
+      <div id="inv">🍺 <b id="inv-beer">0</b> · 🥃 <b id="inv-liquor">0</b> · 💊 <b id="inv-pills">0</b></div>
+      <div id="speed">0 mph</div>
+    </div>
+    <div id="story-card" class="hidden">
+      <div id="story-name"></div>
+      <div id="story-text"></div>
     </div>
     <div id="play-tip" class="hidden"></div>
     <div id="death-card" class="panel hidden">
@@ -67,11 +86,11 @@ export function createHUD(parent: HTMLElement): HUD {
       <div class="shop">
         <button type="button" data-buy="beer">Beer $4</button>
         <button type="button" data-buy="liquor">Liquor $12</button>
-        <button type="button" data-buy="coffee">Coffee $3</button>
+        <button type="button" data-buy="pills">Pills $10</button>
         <button type="button" data-act="sleep">Sleep in cab</button>
         <button type="button" data-act="resume" class="cta">Back on the road</button>
       </div>
-      <p class="hint">Cash: $<span id="pulloff-cash">0</span> · Sleep drains BAC toward the floor.</p>
+      <p class="hint">Cash: $<span id="pulloff-cash">0</span> · Sleep restores alertness but drains BAC toward the floor.</p>
     </div>
   `;
   parent.appendChild(root);
@@ -87,11 +106,9 @@ export function createHUD(parent: HTMLElement): HUD {
       root.querySelector("#meters")?.classList.remove("hidden");
       const bac = root.querySelector("#bar-bac") as HTMLElement;
       const alert = root.querySelector("#bar-alert") as HTMLElement;
-      const job = root.querySelector("#bar-job") as HTMLElement;
       const haul = root.querySelector("#bar-haul") as HTMLElement;
       bac.style.width = `${m.bac * 100}%`;
       alert.style.width = `${m.alertness * 100}%`;
-      job.style.width = `${m.jobStanding * 100}%`;
       haul.style.width = `${quotaProgress(m.miles, quota) * 100}%`;
       const cargo = root.querySelector("#bar-cargo") as HTMLElement | null;
       if (cargo) {
@@ -104,10 +121,9 @@ export function createHUD(parent: HTMLElement): HUD {
       ceil.style.left = `${m.ceiling * 100}%`;
       (root.querySelector("#inv-beer") as HTMLElement).textContent = String(inv.beer);
       (root.querySelector("#inv-liquor") as HTMLElement).textContent = String(inv.liquor);
-      (root.querySelector("#inv-coffee") as HTMLElement).textContent = String(inv.coffee);
+      (root.querySelector("#inv-pills") as HTMLElement).textContent = String(inv.pills);
       (root.querySelector("#inv-cash") as HTMLElement).textContent = String(m.cash);
-      const lagEl = root.querySelector("#lag");
-      if (lagEl) lagEl.textContent = lag.toFixed(2);
+      void lag;
     },
     showTitle(show) {
       root.querySelector("#title-screen")?.classList.toggle("hidden", !show);
@@ -151,6 +167,17 @@ export function createHUD(parent: HTMLElement): HUD {
       el.classList.remove("hidden");
       el.classList.toggle("urgent", urgent);
     },
+    showStoryCard(name, text = "") {
+      const el = root.querySelector("#story-card") as HTMLElement | null;
+      if (!el) return;
+      if (!name) {
+        el.classList.add("hidden");
+        return;
+      }
+      (root.querySelector("#story-name") as HTMLElement).textContent = name;
+      (root.querySelector("#story-text") as HTMLElement).textContent = text;
+      el.classList.remove("hidden");
+    },
   };
 
   root.querySelector("#btn-start")?.addEventListener("click", () => hud.onStart?.());
@@ -189,6 +216,7 @@ export function setHudSpeed(
 ): void {
   const speedEl = hud.root.querySelector("#speed");
   if (speedEl) {
-    speedEl.innerHTML = `haul ${haul} · ${Math.round(mph)} mph · ${Math.floor(miles)} mi · lag <span id="lag">${lag.toFixed(2)}</span>`;
+    speedEl.textContent = `haul ${haul} · ${Math.round(mph)} mph · mile ${Math.floor(miles)}`;
   }
+  void lag;
 }

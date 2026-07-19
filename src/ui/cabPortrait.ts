@@ -1,6 +1,8 @@
 import type { Inventory, MeterState } from "../systems/meters";
 import type { Consumable } from "../systems/meters";
 
+/** Bottom-right cab cam — Earl's actual face, filtered by his bloodstream. */
+
 export interface CabPortrait {
   root: HTMLDivElement;
   setState: (m: MeterState, inv: Inventory) => void;
@@ -12,20 +14,12 @@ export function createCabPortrait(parent: HTMLElement): CabPortrait {
   root.id = "cab-portrait";
   root.innerHTML = `
     <div class="cab-frame">
-      <div class="cab-label">CAB CAM</div>
-      <svg class="face" viewBox="0 0 120 140" aria-hidden="true">
-        <ellipse class="head" cx="60" cy="62" rx="38" ry="44" />
-        <ellipse class="eye left" cx="46" cy="58" rx="7" ry="5" />
-        <ellipse class="eye right" cx="74" cy="58" rx="7" ry="5" />
-        <circle class="pupil left" cx="47" cy="59" r="2.2" />
-        <circle class="pupil right" cx="75" cy="59" r="2.2" />
-        <path class="bag left" d="M38 66 q8 6 16 0" />
-        <path class="bag right" d="M66 66 q8 6 16 0" />
-        <path class="mouth" d="M48 84 q12 6 24 0" />
-        <path class="stubble" d="M42 92 q18 14 36 0" />
-        <rect class="prop" x="0" y="0" width="0" height="0" />
-      </svg>
-      <div class="cab-status" id="cab-status">holding</div>
+      <div class="cab-label">CAB CAM · EARL</div>
+      <div class="cab-face-wrap">
+        <img src="/earl-face.png" alt="Earl" class="cab-face" draggable="false" />
+        <div class="cab-prop" id="cab-prop"></div>
+      </div>
+      <div class="cab-status" id="cab-status">in the pocket</div>
     </div>
   `;
   parent.appendChild(root);
@@ -40,7 +34,6 @@ export function createCabPortrait(parent: HTMLElement): CabPortrait {
       root.classList.toggle("wired", m.wired > 0.2);
       root.classList.toggle("shaking", m.bac < m.floor + 0.02);
       root.classList.toggle("dead-eyed", m.alertness < 0.35);
-      root.classList.toggle("hopeful", m.jobStanding > 0.7 && m.bac > m.floor);
 
       const status = root.querySelector("#cab-status");
       if (status) {
@@ -50,24 +43,16 @@ export function createCabPortrait(parent: HTMLElement): CabPortrait {
         else if (m.bac > m.pocketCenter + 0.1) status.textContent = "buzzed";
         else status.textContent = "in the pocket";
       }
-
-      // Pupil drift when drunk
-      const pupils = root.querySelectorAll(".pupil");
-      const drift = (m.bac - m.pocketCenter) * 4;
-      pupils.forEach((p, i) => {
-        const el = p as SVGElement;
-        const base = i === 0 ? 47 : 75;
-        el.setAttribute("cx", String(base + drift));
-      });
     },
     playConsume(item) {
-      root.classList.remove("sip-beer", "sip-liquor", "sip-coffee");
+      const prop = root.querySelector("#cab-prop") as HTMLElement | null;
+      if (!prop) return;
+      prop.textContent = item === "beer" ? "🍺" : item === "liquor" ? "🥃" : "💊";
+      root.classList.remove("sipping");
       void root.offsetWidth;
-      const cls =
-        item === "beer" ? "sip-beer" : item === "liquor" ? "sip-liquor" : "sip-coffee";
-      root.classList.add(cls);
+      root.classList.add("sipping");
       window.clearTimeout(animTimer);
-      animTimer = window.setTimeout(() => root.classList.remove(cls), 900);
+      animTimer = window.setTimeout(() => root.classList.remove("sipping"), 900);
     },
   };
 }
