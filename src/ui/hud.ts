@@ -49,6 +49,7 @@ export function createHUD(parent: HTMLElement): HUD {
       <div class="meter"><span>BAC</span><div class="bar"><i id="bar-bac"></i><em id="floor-mark"></em><em id="ceil-mark"></em></div></div>
       <div class="meter"><span>ALERT</span><div class="bar"><i id="bar-alert"></i></div></div>
       <div class="meter"><span>JOB</span><div class="bar"><i id="bar-job"></i></div></div>
+      <div class="meter"><span>CARGO</span><div class="bar"><i id="bar-cargo"></i></div></div>
       <div class="meter"><span>HAUL</span><div class="bar"><i id="bar-haul"></i></div></div>
       <div id="inv">🍺 <b id="inv-beer">0</b> · 🥃 <b id="inv-liquor">0</b> · ☕ <b id="inv-coffee">0</b> · $<b id="inv-cash">0</b></div>
       <div id="speed">0 mph · lag <span id="lag">0.00</span></div>
@@ -92,6 +93,11 @@ export function createHUD(parent: HTMLElement): HUD {
       alert.style.width = `${m.alertness * 100}%`;
       job.style.width = `${m.jobStanding * 100}%`;
       haul.style.width = `${quotaProgress(m.miles, quota) * 100}%`;
+      const cargo = root.querySelector("#bar-cargo") as HTMLElement | null;
+      if (cargo) {
+        cargo.style.width = `${m.cargoIntegrity * 100}%`;
+        cargo.classList.toggle("damaged", m.cargoIntegrity < 0.45);
+      }
       const floor = root.querySelector("#floor-mark") as HTMLElement;
       const ceil = root.querySelector("#ceil-mark") as HTMLElement;
       floor.style.left = `${m.floor * 100}%`;
@@ -174,9 +180,15 @@ export function createHUD(parent: HTMLElement): HUD {
   return hud;
 }
 
-export function setHudSpeed(hud: HUD, mph: number, miles: number, lag: number): void {
+export function setHudSpeed(
+  hud: HUD,
+  mph: number,
+  miles: number,
+  lag: number,
+  haul = 1,
+): void {
   const speedEl = hud.root.querySelector("#speed");
   if (speedEl) {
-    speedEl.innerHTML = `${Math.round(mph)} mph · ${Math.floor(miles)} mi · lag <span id="lag">${lag.toFixed(2)}</span>`;
+    speedEl.innerHTML = `haul ${haul} · ${Math.round(mph)} mph · ${Math.floor(miles)} mi · lag <span id="lag">${lag.toFixed(2)}</span>`;
   }
 }

@@ -5,12 +5,15 @@ import {
   STRIP_CLUB_MILES,
   applyConsumable,
   applyJobProgress,
+  applyRoadHit,
   applySleep,
   buyItem,
   checkFired,
   drunkSwayFromBac,
   drunkVisionIntensity,
+  haulPayout,
   needsSip,
+  nextHaul,
   steeringLagFromBac,
   tickMeters,
   tremorIntensity,
@@ -32,11 +35,16 @@ import { createDeer, updateDeer } from "../systems/deer";
 import { createRadio, unmuteRadio, updateRadio } from "../systems/radio";
 import {
   createCabAudio,
+  playPayout,
+  playScreech,
   playSipSound,
+  playThud,
   startCabAudio,
   updateCabAudio,
 } from "../systems/cabAudio";
 import { createStripClub, updateStripClub } from "../systems/stripClub";
+import { createTraffic, resetTraffic, updateTraffic } from "../systems/traffic";
+import { createSky, updateSky } from "../render/sky";
 import { createTruckMesh, syncTruckMesh } from "../render/truck";
 import { createHUD, setHudSpeed } from "../ui/hud";
 import { createCabPortrait } from "../ui/cabPortrait";
@@ -57,6 +65,8 @@ export class Game {
   private truckMesh!: THREE.Group;
   private highway = createHighway();
   private stripClub = createStripClub();
+  private traffic = createTraffic();
+  private sky = createSky();
   private deer = createDeer();
   private keys = new Set<string>();
   private mouseSteer = 0;
@@ -81,6 +91,8 @@ export class Game {
   private storyIndex = 0;
   private storyTimer = 2.5;
   private atStripClub = false;
+  private haul = 1;
+  private swayKick = 0;
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({
@@ -121,6 +133,8 @@ export class Game {
 
     this.scene.add(this.highway.group);
     this.scene.add(this.stripClub.group);
+    this.scene.add(this.traffic.group);
+    this.scene.add(this.sky.group);
     const built = createTruckMesh();
     this.truckMesh = built.mesh;
     this.scene.add(this.truckMesh);
@@ -154,6 +168,10 @@ export class Game {
       this.hud.showTip("Cruise is on. A/D or mouse to steer · 1 beer when the pocket dips");
     };
     this.hud.onRestart = () => {
+      if (this.phase === "won") {
+        this.continueHaul();
+        return;
+      }
       this.hud.showDeath(null);
       this.hud.showTip(null);
       this.hud.showTitle(true);
@@ -263,10 +281,33 @@ export class Game {
     this.microSleep = false;
     this.microTimer = 0;
     this.night = 1;
+    this.haul = 1;
+    this.swayKick = 0;
+    this.stripClub.group.position.z = 7200;
     this.stripClub.approached = false;
     this.stripClub.offered = false;
     this.atStripClub = false;
     this.mouseSteer = 0;
+    resetTraffic(this.traffic);
+  }
+
+  /** Delivery made — bank the payout and roll the next contract. */
+  private continueHaul(): void {
+    this.meters = nextHaul(this.meters, this.haul);
+    this.haul += 1;
+    this.night = 1;
+    this.swayKick = 0;
+    resetTraffic(this.traffic);
+    // Next Lucy's-equivalent restock ~4.5 miles further down the road
+    this.stripClub.group.position.z = this.truck.z + 7200;
+    this.stripClub.approached = false;
+    this.stripClub.offered = false;
+    this.hud.showDeath(null);
+    this.phase = "playing";
+    this.hud.showTip(
+      `Haul ${this.haul}. The floor crept up overnight. It always does.`,
+    );
+    this.tipTimer = 5;
   }
 
   private die(cause: DeathCause): void {
@@ -353,10 +394,20 @@ export class Game {
     }
 
     this.mood.position.set(this.truck.x, 14, this.truck.z + 8);
+    updateSky(this.sky, this.truck.z, this.night);
     const fog = this.scene.fog as THREE.FogExp2;
-    fog.density = 0.012 + this.night * 0.006;
+    // Slow breathing fog banks
+    fog.density =
+      0.012 + this.night * 0.006 + Math.max(0, Math.sin(t * 0.05)) * 0.004;
     this.hemi.intensity = 0.85 + (1 - this.night) * 0.45;
     this.sun.intensity = 0.55 + (1 - this.night) * 0.5;
+
+    // Speed widens the lens a touch
+    const targetFov = 55 + (this.truck.speed / 36) * 8;
+    if (Math.abs(this.camera.fov - targetFov) > 0.1) {
+      this.camera.fov += (targetFov - this.camera.fov) * 0.08;
+      this.camera.updateProjectionMatrix();
+    }
 
     this.renderer.render(this.scene, this.camera);
   }
@@ -384,9 +435,11 @@ export class Game {
 
     const lag = steeringLagFromBac(this.meters);
     const sway = drunkSwayFromBac(this.meters);
-    // Continuous drunk veer noise
+    // Continuous drunk veer noise + impact kicks
+    this.swayKick *= Math.exp(-dt * 2.2);
     const drunkSway =
-      sway * (Math.sin(t * 0.7) * 0.35 + Math.sin(t * 1.9) * 0.2);
+      sway * (Math.sin(t * 0.7) * 0.35 + Math.sin(t * 1.9) * 0.2) +
+      this.swayKick * Math.sin(t * 9);
 
     this.truck = stepTruck(this.truck, {
       throttle,
@@ -399,6 +452,46 @@ export class Game {
 
     syncTruckMesh(this.truckMesh, this.truck);
     updateHighway(this.highway, this.truck.z);
+
+    // Road hazards — traffic, debris, deer crossings
+    const hits = updateTraffic(this.traffic, {
+      dt,
+      truckX: this.truck.x,
+      truckZ: this.truck.z,
+      truckSpeed: this.truck.speed,
+      laneHalfWidth: this.highway.laneHalfWidth,
+      difficulty: this.haul,
+    });
+    for (const hit of hits) {
+      if (hit.kind === "wreck") {
+        this.die("wreck");
+        return;
+      }
+      if (hit.kind === "glance") {
+        this.meters = applyRoadHit(this.meters, "glance");
+        playScreech(this.cabAudio);
+        this.swayKick = 0.5;
+        this.hud.showTip("Traded paint. Cargo felt that.", true);
+        this.tipTimer = 2.2;
+      } else if (hit.kind === "debris") {
+        this.meters = applyRoadHit(this.meters, "debris");
+        playThud(this.cabAudio);
+        this.swayKick = 0.3;
+        this.hud.showTip("Tire carcass under the axle. Load shifted.");
+        this.tipTimer = 2;
+      } else {
+        this.meters = applyRoadHit(this.meters, "deer");
+        playThud(this.cabAudio);
+        this.swayKick = 0.65;
+        this.truck.speed = Math.max(10, this.truck.speed * 0.7);
+        this.hud.showTip("That deer was real. The grille disagrees.", true);
+        this.tipTimer = 2.5;
+      }
+      if (this.meters.cargoIntegrity <= 0) {
+        this.die("fired");
+        return;
+      }
+    }
 
     const club = updateStripClub(this.stripClub, this.truck.z, this.meters.miles);
     if (this.stripClub.approached && club.distanceM < 350 && club.distanceM > 100) {
@@ -422,6 +515,7 @@ export class Game {
       speedMph: mph,
       nightFactor: this.night,
       consuming: false,
+      drainScale: 1 + (this.haul - 1) * 0.18,
     });
     this.meters = tick.meters;
 
@@ -468,7 +562,7 @@ export class Game {
     }
 
     this.hud.setPlaying(this.meters, this.inventory, HAUL_QUOTA, lag);
-    setHudSpeed(this.hud, mph, this.meters.miles, lag);
+    setHudSpeed(this.hud, mph, this.meters.miles, lag, this.haul);
     this.portrait.setState(this.meters, this.inventory);
 
     if (this.tipTimer > 0) {
@@ -505,10 +599,13 @@ export class Game {
     if (this.meters.miles >= HAUL_QUOTA) {
       this.phase = "won";
       this.hud.showTip(null);
+      playPayout(this.cabAudio);
+      const pay = haulPayout(this.meters, this.haul);
+      const cargoPct = Math.round(this.meters.cargoIntegrity * 100);
       this.hud.showDeath({
         headline: "LOAD DELIVERED",
-        sub: `Mile ${Math.floor(this.meters.miles)} · still employed, still thirsty`,
-        tip: "The pocket doesn't reset. Another haul?",
+        sub: `Haul ${this.haul} · cargo ${cargoPct}% · $${pay} wired to the card`,
+        tip: "The pocket doesn't reset. The floor rises. Another haul?",
       });
     }
 

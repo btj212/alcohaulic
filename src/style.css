@@ -173,6 +173,11 @@ body {
   background: linear-gradient(90deg, var(--teal), var(--rust));
 }
 
+#bar-cargo.damaged {
+  background: linear-gradient(90deg, #8a2a1a, var(--rust));
+  animation: tip-pulse 0.8s ease-in-out infinite;
+}
+
 .bar em {
   position: absolute;
   top: -3px;

@@ -156,6 +156,87 @@ function playCough(audio: CabAudio, intensity: number): void {
   click.stop(t0 + 0.12);
 }
 
+/** Metal-on-metal scrape for a glancing hit. */
+export function playScreech(audio: CabAudio): void {
+  const ctx = audio.ctx;
+  if (!ctx) return;
+  const t0 = ctx.currentTime;
+  const dur = 0.5;
+  const noise = ctx.createBufferSource();
+  const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * dur), ctx.sampleRate);
+  const ch = buf.getChannelData(0);
+  for (let i = 0; i < ch.length; i++) {
+    ch[i] = (Math.random() * 2 - 1) * (1 - i / ch.length);
+  }
+  noise.buffer = buf;
+  const filter = ctx.createBiquadFilter();
+  filter.type = "bandpass";
+  filter.frequency.setValueAtTime(2400, t0);
+  filter.frequency.exponentialRampToValueAtTime(900, t0 + dur);
+  filter.Q.value = 3;
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.22, t0);
+  gain.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+  noise.connect(filter);
+  filter.connect(gain);
+  gain.connect(ctx.destination);
+  noise.start(t0);
+  noise.stop(t0 + dur);
+}
+
+/** Dull body thud — debris or a deer strike. */
+export function playThud(audio: CabAudio): void {
+  const ctx = audio.ctx;
+  if (!ctx) return;
+  const t0 = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(120, t0);
+  osc.frequency.exponentialRampToValueAtTime(38, t0 + 0.18);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.4, t0);
+  g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.28);
+  osc.connect(g);
+  g.connect(ctx.destination);
+  osc.start(t0);
+  osc.stop(t0 + 0.3);
+
+  const noise = ctx.createBufferSource();
+  const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.12), ctx.sampleRate);
+  const ch = buf.getChannelData(0);
+  for (let i = 0; i < ch.length; i++) ch[i] = (Math.random() * 2 - 1) * (1 - i / ch.length);
+  noise.buffer = buf;
+  const ng = ctx.createGain();
+  ng.gain.setValueAtTime(0.18, t0);
+  ng.gain.exponentialRampToValueAtTime(0.001, t0 + 0.12);
+  noise.connect(ng);
+  ng.connect(ctx.destination);
+  noise.start(t0);
+}
+
+/** Two-tone payout chime for a delivered load. */
+export function playPayout(audio: CabAudio): void {
+  const ctx = audio.ctx;
+  if (!ctx) return;
+  const t0 = ctx.currentTime;
+  for (const [freq, delay] of [
+    [523, 0],
+    [784, 0.12],
+  ] as const) {
+    const osc = ctx.createOscillator();
+    osc.type = "triangle";
+    osc.frequency.value = freq;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0 + delay);
+    g.gain.exponentialRampToValueAtTime(0.12, t0 + delay + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + delay + 0.4);
+    osc.connect(g);
+    g.connect(ctx.destination);
+    osc.start(t0 + delay);
+    osc.stop(t0 + delay + 0.45);
+  }
+}
+
 export function playSipSound(audio: CabAudio): void {
   const ctx = audio.ctx;
   if (!ctx) return;

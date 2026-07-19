@@ -12,6 +12,9 @@ export const STORY_LINES: string[] = [
 
 export const DISPATCH_LINES: string[] = [
   "Dispatch: You're burning daylight you don't have. Move.",
+  "CB: Slow-roller ahead in your lane. Pass clean or eat the trailer.",
+  "Dispatch: Cargo sensor says you hit something. Sensor better be drunk too.",
+  "CB: Deer are moving tonight. The real ones don't flicker.",
   "Dispatch: Cargo's fragile. Unlike your liver.",
   "CB: Anybody copy? Got a ghost deer on 80 westbound. Again.",
   "Radio ad: Stay awake with Gas-N-Go Beans — legally a beverage.",

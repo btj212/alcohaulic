@@ -43,6 +43,12 @@ export function deathCardFor(
         sub: `Mile ${mile} · alertness zero`,
         tip: "Coffee, a pull-off, or a shorter night.",
       };
+    case "wreck":
+      return {
+        headline: "JACKKNIFED ON I-80",
+        sub: `Mile ${mile} · met a sedan you never saw`,
+        tip: "The left lane is for headlights. Yours is the right.",
+      };
     case "fired":
       return {
         headline: "TERMINATED",

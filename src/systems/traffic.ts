@@ -1,0 +1,320 @@
+import * as THREE from "three";
+
+/**
+ * Road hazards: slow cars in your lane, oncoming headlights, tire debris,
+ * and real deer crossings. Hits bill the player (cargo/job), never bystanders —
+ * a head-on is YOUR wreck.
+ */
+
+export type HazardKind = "slow" | "oncoming" | "debris" | "deer";
+
+export interface Hazard {
+  kind: HazardKind;
+  mesh: THREE.Group;
+  x: number;
+  z: number;
+  /** m/s along +Z (negative = toward the player). */
+  vz: number;
+  /** m/s lateral (deer walk across the road). */
+  vx: number;
+  alive: boolean;
+}
+
+export interface TrafficSystem {
+  group: THREE.Group;
+  hazards: Hazard[];
+  spawnTimer: number;
+  deerTimer: number;
+}
+
+export interface TrafficEvent {
+  kind: "wreck" | "glance" | "debris" | "deer";
+}
+
+const CAR_COLORS = [0x8a3a2a, 0x2a4a6a, 0x555a44, 0x6a5a2a, 0x4a2a5a];
+
+export function createTraffic(): TrafficSystem {
+  return {
+    group: new THREE.Group(),
+    hazards: [],
+    spawnTimer: 6,
+    deerTimer: 40,
+  };
+}
+
+function makeCar(kind: "slow" | "oncoming", seedColor: number): THREE.Group {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(1.9, 1.3, 4.4),
+    new THREE.MeshStandardMaterial({
+      color: seedColor,
+      roughness: 0.6,
+      metalness: 0.2,
+      flatShading: true,
+    }),
+  );
+  body.position.y = 0.85;
+  g.add(body);
+
+  const cabin = new THREE.Mesh(
+    new THREE.BoxGeometry(1.7, 0.8, 2.0),
+    new THREE.MeshStandardMaterial({
+      color: 0x1a2028,
+      roughness: 0.4,
+      flatShading: true,
+    }),
+  );
+  cabin.position.set(0, 1.7, -0.3);
+  g.add(cabin);
+
+  if (kind === "oncoming") {
+    // Headlights facing the player
+    for (const side of [-1, 1]) {
+      const lens = new THREE.Mesh(
+        new THREE.BoxGeometry(0.3, 0.2, 0.08),
+        new THREE.MeshBasicMaterial({ color: 0xfff4cc }),
+      );
+      lens.position.set(side * 0.65, 0.8, -2.25);
+      g.add(lens);
+    }
+    const glow = new THREE.PointLight(0xfff0c0, 6, 30, 1.8);
+    glow.position.set(0, 0.9, -3);
+    g.add(glow);
+  } else {
+    for (const side of [-1, 1]) {
+      const tail = new THREE.Mesh(
+        new THREE.BoxGeometry(0.3, 0.18, 0.08),
+        new THREE.MeshBasicMaterial({ color: 0xff3322 }),
+      );
+      tail.position.set(side * 0.65, 0.85, -2.25);
+      g.add(tail);
+    }
+    const glow = new THREE.PointLight(0xff4422, 1.2, 12, 2);
+    glow.position.set(0, 0.9, -2.6);
+    g.add(glow);
+  }
+  return g;
+}
+
+function makeDebris(): THREE.Group {
+  const g = new THREE.Group();
+  const chunk = new THREE.Mesh(
+    new THREE.BoxGeometry(1.1, 0.35, 0.8),
+    new THREE.MeshStandardMaterial({ color: 0x151518, roughness: 1, flatShading: true }),
+  );
+  chunk.position.y = 0.18;
+  chunk.rotation.y = Math.random() * Math.PI;
+  g.add(chunk);
+  const strip = new THREE.Mesh(
+    new THREE.BoxGeometry(0.5, 0.1, 1.4),
+    new THREE.MeshStandardMaterial({ color: 0x202024, roughness: 1, flatShading: true }),
+  );
+  strip.position.set(0.4, 0.08, 0.3);
+  g.add(strip);
+  return g;
+}
+
+function makeRealDeer(): THREE.Group {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0x7a5a34,
+    roughness: 0.9,
+    flatShading: true,
+  });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.75, 1.5), mat);
+  body.position.y = 1.0;
+  g.add(body);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.4, 0.5), mat);
+  head.position.set(0, 1.6, 0.8);
+  g.add(head);
+  for (const [x, z] of [
+    [-0.2, 0.5],
+    [0.2, 0.5],
+    [-0.2, -0.5],
+    [0.2, -0.5],
+  ] as const) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.7, 0.12), mat);
+    leg.position.set(x, 0.35, z);
+    g.add(leg);
+  }
+  // Eye shine — real ones catch your headlights too
+  for (const side of [-1, 1]) {
+    const eye = new THREE.Mesh(
+      new THREE.SphereGeometry(0.05, 6, 6),
+      new THREE.MeshBasicMaterial({ color: 0xffffaa }),
+    );
+    eye.position.set(side * 0.1, 1.65, 1.02);
+    g.add(eye);
+  }
+  return g;
+}
+
+function spawnHazard(
+  sys: TrafficSystem,
+  truckZ: number,
+  laneHalfWidth: number,
+  difficulty: number,
+): void {
+  const roll = Math.random();
+  let hazard: Hazard;
+
+  if (roll < 0.42) {
+    // Slow car ahead in your lane, drifting right of center
+    const mesh = makeCar("slow", CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)]!);
+    hazard = {
+      kind: "slow",
+      mesh,
+      x: 1.2 + Math.random() * (laneHalfWidth - 2.6),
+      z: truckZ + 180 + Math.random() * 80,
+      vz: 12 + Math.random() * 4,
+      vx: 0,
+      alive: true,
+    };
+  } else if (roll < 0.78) {
+    // Oncoming in the left lane
+    const mesh = makeCar("oncoming", CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)]!);
+    mesh.rotation.y = Math.PI;
+    hazard = {
+      kind: "oncoming",
+      mesh,
+      x: -(1.6 + Math.random() * (laneHalfWidth - 3)),
+      z: truckZ + 260 + Math.random() * 120,
+      vz: -(20 + Math.random() * 8 + difficulty * 2),
+      vx: 0,
+      alive: true,
+    };
+  } else {
+    hazard = {
+      kind: "debris",
+      mesh: makeDebris(),
+      x: (Math.random() * 2 - 1) * (laneHalfWidth - 1.5),
+      z: truckZ + 200 + Math.random() * 100,
+      vz: 0,
+      vx: 0,
+      alive: true,
+    };
+  }
+
+  hazard.mesh.position.set(hazard.x, 0, hazard.z);
+  sys.group.add(hazard.mesh);
+  sys.hazards.push(hazard);
+}
+
+function spawnDeerCrossing(sys: TrafficSystem, truckZ: number, laneHalfWidth: number): void {
+  const fromLeft = Math.random() > 0.5;
+  const mesh = makeRealDeer();
+  const startX = fromLeft ? -(laneHalfWidth + 6) : laneHalfWidth + 6;
+  const hazard: Hazard = {
+    kind: "deer",
+    mesh,
+    x: startX,
+    z: truckZ + 120 + Math.random() * 60,
+    vz: 0,
+    vx: (fromLeft ? 1 : -1) * (2.6 + Math.random() * 1.6),
+    alive: true,
+  };
+  mesh.rotation.y = fromLeft ? Math.PI / 2 : -Math.PI / 2;
+  mesh.position.set(hazard.x, 0, hazard.z);
+  sys.group.add(mesh);
+  sys.hazards.push(hazard);
+}
+
+export function updateTraffic(
+  sys: TrafficSystem,
+  opts: {
+    dt: number;
+    truckX: number;
+    truckZ: number;
+    truckSpeed: number;
+    laneHalfWidth: number;
+    /** 1 = first haul; scales spawn rate and speeds. */
+    difficulty: number;
+  },
+): TrafficEvent[] {
+  const { dt, truckX, truckZ, laneHalfWidth, difficulty } = opts;
+  const events: TrafficEvent[] = [];
+
+  sys.spawnTimer -= dt;
+  if (sys.spawnTimer <= 0) {
+    spawnHazard(sys, truckZ, laneHalfWidth, difficulty);
+    const base = 9 - Math.min(4.5, difficulty * 1.5);
+    sys.spawnTimer = base + Math.random() * 5;
+  }
+
+  sys.deerTimer -= dt;
+  if (sys.deerTimer <= 0) {
+    spawnDeerCrossing(sys, truckZ, laneHalfWidth);
+    sys.deerTimer = 55 + Math.random() * 40;
+  }
+
+  for (const h of sys.hazards) {
+    if (!h.alive) continue;
+    h.z += h.vz * dt;
+    h.x += h.vx * dt;
+    h.mesh.position.set(h.x, 0, h.z);
+
+    const dz = h.z - truckZ;
+    const dx = h.x - truckX;
+
+    // Collision windows (truck half-width ~1.3 + hazard size)
+    if (h.kind === "debris") {
+      if (Math.abs(dx) < 1.7 && Math.abs(dz) < 2.4) {
+        events.push({ kind: "debris" });
+        h.alive = false;
+      }
+    } else if (h.kind === "deer") {
+      if (Math.abs(dx) < 1.9 && Math.abs(dz) < 2.8) {
+        events.push({ kind: "deer" });
+        h.alive = false;
+      } else if (Math.abs(h.x) > laneHalfWidth + 8) {
+        h.alive = false; // made it across
+      }
+    } else {
+      if (Math.abs(dz) < 4.6) {
+        const overlap = Math.abs(dx);
+        if (overlap < 1.5) {
+          events.push({ kind: "wreck" });
+          h.alive = false;
+        } else if (overlap < 2.6) {
+          events.push({ kind: "glance" });
+          h.alive = false;
+        }
+      }
+    }
+
+    // Despawn far behind
+    if (dz < -120 || dz > 600) h.alive = false;
+  }
+
+  // Cull dead hazards
+  for (let i = sys.hazards.length - 1; i >= 0; i--) {
+    const h = sys.hazards[i]!;
+    if (!h.alive) {
+      sys.group.remove(h.mesh);
+      disposeGroup(h.mesh);
+      sys.hazards.splice(i, 1);
+    }
+  }
+
+  return events;
+}
+
+export function resetTraffic(sys: TrafficSystem): void {
+  for (const h of sys.hazards) {
+    sys.group.remove(h.mesh);
+    disposeGroup(h.mesh);
+  }
+  sys.hazards.length = 0;
+  sys.spawnTimer = 6;
+  sys.deerTimer = 40;
+}
+
+function disposeGroup(g: THREE.Object3D): void {
+  g.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (m.geometry) m.geometry.dispose();
+    const mat = m.material;
+    if (Array.isArray(mat)) mat.forEach((x) => x.dispose());
+    else if (mat) mat.dispose();
+  });
+}

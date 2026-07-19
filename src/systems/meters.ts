@@ -4,6 +4,7 @@ export type DeathCause =
   | "withdrawal"
   | "blackout"
   | "crash"
+  | "wreck"
   | "fired"
   | "seizure";
 
@@ -105,6 +106,8 @@ export interface TickInput {
   speedMph: number;
   nightFactor: number;
   consuming: boolean;
+  /** Difficulty multiplier for BAC drain — rises with each haul. */
+  drainScale?: number;
 }
 
 export interface TickResult {
@@ -117,7 +120,8 @@ export function tickMeters(m: MeterState, input: TickInput): TickResult {
   const next: MeterState = { ...m };
 
   // Slow enough for a 5-minute first leg with the starter cooler
-  const drain = input.consuming ? 0.002 : 0.0042;
+  const scale = input.drainScale ?? 1;
+  const drain = (input.consuming ? 0.002 : 0.0042) * scale;
   next.bac = Math.max(0, next.bac - drain * input.dt);
   next.wired = Math.max(0, next.wired - 0.08 * input.dt);
 
@@ -241,4 +245,43 @@ export function checkFired(m: MeterState): boolean {
 
 export function quotaProgress(miles: number, quota: number): number {
   return clamp01(miles / quota);
+}
+
+export type RoadHitKind = "debris" | "glance" | "deer";
+
+/** Non-fatal road impacts — the road bills you, not bystanders. */
+export function applyRoadHit(m: MeterState, kind: RoadHitKind): MeterState {
+  const next = { ...m };
+  if (kind === "debris") {
+    next.cargoIntegrity = clamp01(next.cargoIntegrity - 0.08);
+  } else if (kind === "glance") {
+    next.cargoIntegrity = clamp01(next.cargoIntegrity - 0.18);
+    next.jobStanding = clamp01(next.jobStanding - 0.06);
+  } else {
+    next.cargoIntegrity = clamp01(next.cargoIntegrity - 0.22);
+    next.jobStanding = clamp01(next.jobStanding - 0.04);
+  }
+  return next;
+}
+
+/** Delivery payout: base rate plus a bonus for intact cargo. */
+export function haulPayout(m: MeterState, haul: number): number {
+  return Math.round(140 + m.cargoIntegrity * 60 + (haul - 1) * 20);
+}
+
+/**
+ * Roll into the next contract. Cash lands, cargo resets —
+ * but the floor ratchets up. The pocket never resets.
+ */
+export function nextHaul(m: MeterState, haul: number): MeterState {
+  return {
+    ...m,
+    cash: m.cash + haulPayout(m, haul),
+    miles: 0,
+    cargoIntegrity: 1,
+    jobStanding: clamp01(m.jobStanding + 0.08),
+    alertness: clamp01(m.alertness + 0.12),
+    floor: Math.min(m.ceiling - 0.22, m.floor + 0.025),
+    pocketCenter: Math.min(m.ceiling - 0.18, m.pocketCenter + 0.012),
+  };
 }

@@ -3,10 +3,13 @@ import {
   DEFAULT_INVENTORY,
   DEFAULT_METERS,
   applyConsumable,
+  applyRoadHit,
   applySleep,
   buyItem,
   drunkSwayFromBac,
   drunkVisionIntensity,
+  haulPayout,
+  nextHaul,
   steeringLagFromBac,
   tickMeters,
   tremorIntensity,
@@ -90,5 +93,38 @@ describe("meters — pocket inversion", () => {
       12,
     );
     expect(ok).toBe(false);
+  });
+
+  it("road hits bill cargo and job, never instantly fatal", () => {
+    let m = { ...DEFAULT_METERS };
+    m = applyRoadHit(m, "glance");
+    expect(m.cargoIntegrity).toBeLessThan(1);
+    expect(m.jobStanding).toBeLessThan(1);
+    m = applyRoadHit(m, "debris");
+    m = applyRoadHit(m, "deer");
+    expect(m.cargoIntegrity).toBeGreaterThan(0);
+  });
+
+  it("next haul pays out but ratchets the floor up", () => {
+    const before = { ...DEFAULT_METERS, cargoIntegrity: 0.8, cash: 50 };
+    const pay = haulPayout(before, 1);
+    const after = nextHaul(before, 1);
+    expect(after.cash).toBe(50 + pay);
+    expect(after.miles).toBe(0);
+    expect(after.cargoIntegrity).toBe(1);
+    expect(after.floor).toBeGreaterThan(before.floor);
+    expect(after.pocketCenter).toBeGreaterThan(before.pocketCenter);
+  });
+
+  it("drain scale accelerates BAC loss on later hauls", () => {
+    const slow = tickMeters(
+      { ...DEFAULT_METERS },
+      { dt: 10, speedMph: 55, nightFactor: 1, consuming: false, drainScale: 1 },
+    );
+    const fast = tickMeters(
+      { ...DEFAULT_METERS },
+      { dt: 10, speedMph: 55, nightFactor: 1, consuming: false, drainScale: 1.5 },
+    );
+    expect(fast.meters.bac).toBeLessThan(slow.meters.bac);
   });
 });

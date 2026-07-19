@@ -132,6 +132,88 @@ function makeChunk(seed: number, z0: number): THREE.Group {
     g.add(glow);
   }
 
+  // Guardrails along both shoulders
+  const railMat = new THREE.MeshStandardMaterial({
+    color: 0x5a626e,
+    metalness: 0.5,
+    roughness: 0.5,
+    flatShading: true,
+  });
+  for (const side of [-1, 1]) {
+    const rail = new THREE.Mesh(
+      new THREE.BoxGeometry(0.12, 0.45, CHUNK_LEN * 0.96),
+      railMat,
+    );
+    rail.position.set(side * (LANE_HALF + 1.6), 0.65, CHUNK_LEN / 2);
+    g.add(rail);
+    for (let i = 0; i < 5; i++) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.65, 0.1), railMat);
+      post.position.set(side * (LANE_HALF + 1.6), 0.32, 8 + i * 16);
+      g.add(post);
+    }
+  }
+
+  // Scrub pines + brush silhouettes on the shoulders
+  const treeMat = new THREE.MeshStandardMaterial({
+    color: 0x16281c,
+    roughness: 1,
+    flatShading: true,
+  });
+  const trunkMat = new THREE.MeshStandardMaterial({
+    color: 0x241a12,
+    roughness: 1,
+    flatShading: true,
+  });
+  const treeCount = 2 + Math.floor(rng() * 4);
+  for (let i = 0; i < treeCount; i++) {
+    const side = rng() > 0.5 ? 1 : -1;
+    const tz = rng() * CHUNK_LEN;
+    const dist = LANE_HALF + 9 + rng() * 22;
+    const h = 4 + rng() * 7;
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(1.4 + rng() * 1.2, h, 6), treeMat);
+    cone.position.set(side * dist, h / 2 + 0.6, tz);
+    g.add(cone);
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.24, 1.2, 5), trunkMat);
+    trunk.position.set(side * dist, 0.6, tz);
+    g.add(trunk);
+  }
+
+  // Distant hill silhouettes
+  if (rng() > 0.5) {
+    const side = rng() > 0.5 ? 1 : -1;
+    const hill = new THREE.Mesh(
+      new THREE.ConeGeometry(26 + rng() * 22, 13 + rng() * 10, 7),
+      new THREE.MeshStandardMaterial({ color: 0x0e1622, roughness: 1, flatShading: true }),
+    );
+    hill.position.set(side * (LANE_HALF + 46 + rng() * 25), 4, rng() * CHUNK_LEN);
+    g.add(hill);
+  }
+
+  // Occasional roadside billboard (dark comedy filler)
+  if (rng() > 0.62) {
+    const side = rng() > 0.5 ? 1 : -1;
+    const bz = 15 + rng() * (CHUNK_LEN - 30);
+    const board = new THREE.Mesh(
+      new THREE.BoxGeometry(7, 3.2, 0.2),
+      new THREE.MeshStandardMaterial({
+        color: [0x6a2a3a, 0x2a4a5a, 0x5a4a1a][Math.floor(rng() * 3)],
+        emissive: 0x111111,
+        flatShading: true,
+      }),
+    );
+    board.position.set(side * (LANE_HALF + 11), 5.4, bz);
+    board.rotation.y = side > 0 ? -0.5 : 0.5;
+    g.add(board);
+    for (const px of [-2.6, 2.6]) {
+      const leg = new THREE.Mesh(
+        new THREE.BoxGeometry(0.22, 4, 0.22),
+        new THREE.MeshStandardMaterial({ color: 0x33333c, flatShading: true }),
+      );
+      leg.position.set(side * (LANE_HALF + 11) + px * 0.4, 1.9, bz);
+      g.add(leg);
+    }
+  }
+
   return g;
 }
 
